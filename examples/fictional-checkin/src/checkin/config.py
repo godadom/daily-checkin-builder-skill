@@ -192,14 +192,14 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     ):
         raise ConfigError("CHECKIN_BASE_URL must be an HTTPS origin without credentials, path, query, or fragment")
     base_url = f"https://{parsed.netloc}"
-    status_path = _endpoint_path(
-        env.get("CHECKIN_STATUS_PATH", "/api/checkin/status").strip(),
-        "CHECKIN_STATUS_PATH",
-    )
-    checkin_path = _endpoint_path(
-        env.get("CHECKIN_ACTION_PATH", "/api/checkin").strip(),
-        "CHECKIN_ACTION_PATH",
-    )
+    status_path_value = env.get("CHECKIN_STATUS_PATH", "").strip()
+    checkin_path_value = env.get("CHECKIN_ACTION_PATH", "").strip()
+    if not status_path_value:
+        raise ConfigError("set CHECKIN_STATUS_PATH from verified site-analysis evidence")
+    if not checkin_path_value:
+        raise ConfigError("set CHECKIN_ACTION_PATH from verified site-analysis evidence")
+    status_path = _endpoint_path(status_path_value, "CHECKIN_STATUS_PATH")
+    checkin_path = _endpoint_path(checkin_path_value, "CHECKIN_ACTION_PATH")
     connect_timeout = float(_number(env, "CHECKIN_CONNECT_TIMEOUT", "5", float, minimum=0.1, maximum=120))
     read_timeout = float(_number(env, "CHECKIN_READ_TIMEOUT", "15", float, minimum=0.1, maximum=120))
     timezone = env.get("CHECKIN_TIMEZONE", "Asia/Shanghai").strip()

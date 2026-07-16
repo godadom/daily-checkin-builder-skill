@@ -8,9 +8,20 @@ from checkin.auth import authentication_headers
 from checkin.config import ConfigError, load_settings
 
 
+def valid_env(**overrides):
+    env = {
+        "CHECKIN_BASE_URL": "https://checkin.example.invalid",
+        "CHECKIN_STATUS_PATH": "/api/checkin/status",
+        "CHECKIN_ACTION_PATH": "/api/checkin",
+        "CHECKIN_TOKEN": "placeholder",
+    }
+    env.update(overrides)
+    return env
+
+
 class ConfigTests(unittest.TestCase):
     def test_configuration_read_and_field_validation(self):
-        env = {"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_TOKEN": "placeholder"}
+        env = valid_env()
         settings = load_settings(env)
         self.assertEqual(settings.base_url, "https://checkin.example.invalid")
         with self.assertRaisesRegex(ConfigError, "HTTPS origin"):
@@ -24,8 +35,16 @@ class ConfigTests(unittest.TestCase):
             load_settings({**env, "CHECKIN_NOTIFY_MODE": "webhook"})
         self.assertEqual(load_settings({**env, "CHECKIN_NOTIFY_MODE": "off"}).notify_mode, "off")
 
+    def test_endpoint_paths_are_required_instead_of_guessed(self):
+        for missing in ("CHECKIN_STATUS_PATH", "CHECKIN_ACTION_PATH"):
+            with self.subTest(missing=missing):
+                env = valid_env()
+                del env[missing]
+                with self.assertRaisesRegex(ConfigError, f"set {missing} from verified site-analysis evidence"):
+                    load_settings(env)
+
     def test_origin_and_endpoint_paths_cannot_change_request_authority(self):
-        env = {"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_TOKEN": "placeholder"}
+        env = valid_env()
         for unsafe_origin in (
             "https://checkin.example.invalid/api",
             "https://checkin.example.invalid?token=fixture-secret",
@@ -51,12 +70,11 @@ class ConfigTests(unittest.TestCase):
         )
 
     def test_single_account_parsing(self):
-        settings = load_settings({
-            "CHECKIN_BASE_URL": "https://checkin.example.invalid",
-            "CHECKIN_AUTH_TYPE": "cookie",
-            "CHECKIN_COOKIE": "session=placeholder",
-            "CHECKIN_ACCOUNT_NAME": "primary",
-        })
+        settings = load_settings(valid_env(
+            CHECKIN_AUTH_TYPE="cookie",
+            CHECKIN_COOKIE="session=placeholder",
+            CHECKIN_ACCOUNT_NAME="primary",
+        ))
         self.assertEqual((settings.accounts[0].name, settings.accounts[0].auth_type), ("primary", "cookie"))
 
     def test_multi_account_parsing_and_friendly_errors(self):
@@ -64,19 +82,19 @@ class ConfigTests(unittest.TestCase):
             {"name": "one", "auth_type": "bearer", "token": "placeholder-one"},
             {"name": "two", "auth_type": "api_key", "api_key": "placeholder-two"},
         ])
-        settings = load_settings({"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_ACCOUNTS": raw})
+        settings = load_settings(valid_env(CHECKIN_ACCOUNTS=raw))
         self.assertEqual([item.name for item in settings.accounts], ["one", "two"])
         duplicate = json.dumps([
             {"name": "Same", "auth_type": "bearer", "token": "placeholder-one"},
             {"name": "same", "auth_type": "bearer", "token": "placeholder-two"},
         ])
         with self.assertRaisesRegex(ConfigError, "unique"):
-            load_settings({"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_ACCOUNTS": duplicate})
+            load_settings(valid_env(CHECKIN_ACCOUNTS=duplicate))
         with self.assertRaisesRegex(ConfigError, "valid JSON"):
-            load_settings({"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_ACCOUNTS": "["})
+            load_settings(valid_env(CHECKIN_ACCOUNTS="["))
 
     def test_resource_bounds_and_safe_identifiers(self):
-        env = {"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_TOKEN": "placeholder"}
+        env = valid_env()
         for key, value in (
             ("CHECKIN_CONNECT_TIMEOUT", "121"),
             ("CHECKIN_READ_TIMEOUT", "0"),
@@ -98,7 +116,7 @@ class ConfigTests(unittest.TestCase):
         unsafe_item["api_key" + "_header"] = "fixture-invalid-header" + chr(13) + chr(10) + "Injected"
         unsafe_account = json.dumps([unsafe_item])
         with self.assertRaisesRegex(ConfigError, "valid HTTP header"):
-            load_settings({"CHECKIN_BASE_URL": "https://checkin.example.invalid", "CHECKIN_ACCOUNTS": unsafe_account})
+            load_settings(valid_env(CHECKIN_ACCOUNTS=unsafe_account))
         for unsafe_url in ("https:" + "//[", "https://checkin.example.invalid:99999"):
             with self.subTest(url=unsafe_url), self.assertRaisesRegex(ConfigError, "valid HTTPS origin"):
                 load_settings({**env, "CHECKIN_BASE_URL": unsafe_url})

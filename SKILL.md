@@ -1,11 +1,11 @@
 ---
 name: daily-checkin-builder
-description: "分析和实现经用户授权的网站每日签到自动化，生成或修复可维护、可测试的 Python 或 Node.js 项目，并部署到 GitHub Actions、青龙面板或本地命令行。用户提供签到页 URL、脱敏 HAR、Copy as cURL、请求头、前端代码、接口响应或已有脚本，并要求分析签到接口、处理 Cookie/Token/CSRF/Token 刷新、多账号、重试或通知时使用。不得用于未授权访问、凭据或会话窃取、暴力破解、绕过 CAPTCHA/WAF/设备证明/WebAuthn/短信验证/反机器人挑战/付费或访问控制、隐蔽爬取、攻击、批量注册、刷奖励或活动滥用；普通网页总结和 UI 开发也不使用。"
+description: "分析和实现经用户授权的网站每日签到自动化，生成或修复可维护、可测试的 Python 3 项目，并部署到 GitHub Actions、青龙面板或本地命令行；用户已经提供 Node.js 签到项目时，可在其现有结构和原生工具内修复，但不从零生成 Node.js 项目。用户提供签到页 URL、脱敏 HAR、Copy as cURL、请求头、前端代码、接口响应或已有脚本，并要求分析签到接口、处理 Cookie/Token/CSRF/Token 刷新、多账号、重试或通知时使用。不得用于未授权访问、凭据或会话窃取、暴力破解、绕过 CAPTCHA/WAF/设备证明/WebAuthn/短信验证/反机器人挑战/付费或访问控制、隐蔽爬取、攻击、批量注册、刷奖励或活动滥用；普通网页分析、网页总结、爬取、UI 开发、通用 API 分析和通用 CI 配置也不使用。"
 ---
 
 # 每日签到项目构建
 
-把用户有权自动化的正常签到流程转换为可维护、可测试、可部署的项目。默认生成 Python 3 项目；仅在目标流程或现有代码明确需要时使用 Node.js。
+把用户有权自动化的正常签到流程转换为可维护、可测试、可部署的 Python 3 项目。只有用户已经提供 Node.js 签到项目时，才在其现有结构和项目原生工具内修复；不要从零生成 Node.js 项目，也不要把 Python 模板伪装成 Node.js 支持。
 
 ## 守住授权和安全边界
 
@@ -35,7 +35,7 @@ description: "分析和实现经用户授权的网站每日签到自动化，生
 
 ## 阶段 3：生成或修复项目
 
-1. 读取 [references/implementation-contract.md](references/implementation-contract.md)，从 `assets/templates/python-checkin/` 复制最接近的骨架，再用已验证事实替换显式占位符。不要把真实凭据写入任何文件。
+1. 读取 [references/implementation-contract.md](references/implementation-contract.md)。新建项目或处理 Python 项目时，从 `assets/templates/python-checkin/` 复制骨架，再用已验证事实替换显式占位符；用户已提供 Node.js 项目时保留其结构，只移植同一安全、状态和部署契约。不要把真实凭据写入任何文件。
 2. 分离配置、认证、HTTP 客户端、业务状态机、日志脱敏、通知和入口；GitHub Actions、青龙与本地运行必须共用同一业务入口。
 3. 从环境变量、GitHub Secrets 或青龙环境变量读取秘密。支持结构化多账号配置，并给出格式校验和不泄密的错误信息。
 4. 设置连接与读取超时。仅对确定安全的请求自动重试；签到 POST 未确认幂等时，先查询状态再决定是否重试。处理 401、403、409、429、5xx 和 `Retry-After`。
@@ -52,11 +52,13 @@ description: "分析和实现经用户授权的网站每日签到自动化，生
 
 1. 读取 [references/testing.md](references/testing.md)，使用 mock HTTP 和脱敏 fixture 覆盖配置、单/多账号、成功、已签到、认证过期、CSRF、超时、429、5xx、响应漂移、日志脱敏、部分失败和防重复重试。
 2. 默认禁止测试访问真实站点。仅在用户明确授权并主动设置 `LIVE_TEST=1` 时运行 live test；不得在 Pull Request 或 fork 工作流中自动启用。
-3. 运行项目测试，再运行：
+3. 对 Python 项目先运行完整离线测试，再运行：
 
    ```text
    python <skill-directory>/scripts/validate_generated_project.py <generated-project>
    ```
+
+   对用户提供的现有 Node.js 项目，运行其锁文件对应的原生测试、lint、依赖审计和部署配置检查；明确说明仓库内 Python 生成项目验证器不适用，不得用一次导入或启动冒充完整验证。
 
 4. 解析生成的 GitHub Actions YAML，确认青龙命令可直接运行，并检查所有失败路径产生非零退出码。
 5. 执行安全审查和差异审查：搜索秘密、个人数据、真实站点残留、完整请求头日志、过宽权限、未固定 Action、联网测试和未验证假设。

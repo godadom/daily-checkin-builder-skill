@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a project produced by the daily-checkin-builder skill.
+"""Validate a Python project produced by the daily-checkin-builder skill.
 
 This is a deterministic, dependency-free structural and security smoke check.
 It does not contact a live website and never needs runtime credentials.
@@ -8,11 +8,13 @@ It does not contact a live website and never needs runtime credentials.
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import binascii
 import json
 import re
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
@@ -170,6 +172,15 @@ APPROVED_ACTION_SHAS = {
     "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
     "actions/setup-python": "a309ff8b426b58ec0e2a45f0f869d46889d02405",
 }
+REQUIRED_STATUS_NAMES = (
+    "SUCCESS",
+    "ALREADY_DONE",
+    "AUTH_EXPIRED",
+    "TEMPORARY_ERROR",
+    "SITE_CHANGED",
+    "CONFIG_ERROR",
+    "UNSUPPORTED_SECURITY_CHALLENGE",
+)
 
 
 @dataclass(frozen=True)
@@ -556,6 +567,192 @@ def requirement_findings(root: Path) -> list[Finding]:
     return findings
 
 
+def syntax_findings(root: Path) -> list[Finding]:
+    """Parse supported source and configuration formats without executing code."""
+
+    findings: list[Finding] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or any(part in IGNORED_DIRECTORIES for part in path.parts):
+            continue
+        try:
+            if path.suffix.lower() == ".py":
+                ast.parse(read_text(path), filename=str(path))
+            elif path.suffix.lower() == ".toml":
+                tomllib.loads(read_text(path))
+            elif path.suffix.lower() == ".json":
+                json.loads(read_text(path))
+        except SyntaxError as exc:
+            findings.append(Finding(path, exc.lineno or 0, f"invalid Python syntax: {exc.msg}"))
+        except tomllib.TOMLDecodeError as exc:
+            findings.append(Finding(path, 0, f"invalid TOML: {exc}"))
+        except json.JSONDecodeError as exc:
+            findings.append(Finding(path, exc.lineno, f"invalid JSON: {exc.msg}"))
+        except (OSError, UnicodeError) as exc:
+            findings.append(Finding(path, 0, f"cannot parse file: {type(exc).__name__}"))
+    return findings
+
+
+def site_analysis_findings(root: Path) -> list[Finding]:
+    path = root / "docs" / "site-analysis.md"
+    if not nonempty_file(path):
+        return [Finding(path, 0, "docs/site-analysis.md is missing or empty")]
+    try:
+        text = read_text(path)
+    except (OSError, UnicodeError) as exc:
+        return [Finding(path, 0, f"site analysis cannot be read: {type(exc).__name__}")]
+    lowered = text.casefold()
+    required_groups = {
+        "authorization scope": ("authorization", "授权"),
+        "evidence source": ("evidence", "证据"),
+        "request contract": ("request contract", "请求契约", "请求流程"),
+        "state evidence": ("state evidence", "状态证据", "状态判定"),
+        "open assumptions": ("assumption", "假设", "待确认"),
+        "CSRF evidence": ("csrf",),
+        "success evidence": ("success", "成功"),
+        "already-done evidence": ("already", "已签到"),
+        "authentication-expiry evidence": ("authentication expired", "auth_expired", "认证过期"),
+        "temporary-error evidence": ("temporary", "临时"),
+        "site-change evidence": ("site changed", "site_changed", "网站变化"),
+    }
+    findings: list[Finding] = []
+    for label, alternatives in required_groups.items():
+        if not any(term.casefold() in lowered for term in alternatives):
+            findings.append(Finding(path, 0, f"site analysis lacks {label}"))
+    if TODO_RE.search(text):
+        findings.append(Finding(path, 0, "site analysis contains an unfinished TODO"))
+    return findings
+
+
+def readme_contract_findings(root: Path) -> list[Finding]:
+    path = root / "README.md"
+    if not nonempty_file(path):
+        return [Finding(path, 0, "README.md is missing or empty")]
+    try:
+        text = read_text(path)
+    except (OSError, UnicodeError) as exc:
+        return [Finding(path, 0, f"README cannot be read: {type(exc).__name__}")]
+    lowered = text.casefold()
+    required_groups = {
+        "authorization boundary": ("authorized", "授权"),
+        "site analysis": ("docs/site-analysis.md",),
+        "local run": ("local", "本地"),
+        "GitHub deployment": ("github actions",),
+        "QingLong deployment": ("qinglong", "青龙"),
+        "multi-account configuration": ("checkin_accounts", "multi-account", "多账号"),
+        "secret handling": ("secret", "credential", "凭据", "秘密"),
+        "offline tests": ("offline", "mock", "离线"),
+    }
+    findings: list[Finding] = []
+    for label, alternatives in required_groups.items():
+        if not any(term.casefold() in lowered for term in alternatives):
+            findings.append(Finding(path, 0, f"README lacks {label}"))
+    for status in REQUIRED_STATUS_NAMES:
+        if status.casefold() not in lowered:
+            findings.append(Finding(path, 0, f"README lacks state {status}"))
+    return findings
+
+
+def runtime_contract_findings(root: Path) -> list[Finding]:
+    """Require substantive authentication/state logic and reject guessed endpoints."""
+
+    source_files = [
+        path
+        for path in iter_text_files(root)
+        if path.suffix.lower() in CODE_SUFFIXES
+        and not any(part.casefold() in {"tests", "test", "fixtures", "docs"} for part in path.relative_to(root).parts)
+    ]
+    combined = "\n".join(read_text(path) for path in source_files)
+    lowered = combined.casefold()
+    findings: list[Finding] = []
+    required_groups = {
+        "Cookie authentication": ("cookie",),
+        "Bearer authentication": ("bearer", "authorization"),
+        "CSRF handling": ("csrf",),
+        "multi-account configuration": ("checkin_accounts", "accounts"),
+        "bounded retries": ("max_retries", "retry"),
+        "redaction": ("redact", "mask", "sanitize"),
+    }
+    for label, alternatives in required_groups.items():
+        if not any(term in lowered for term in alternatives):
+            findings.append(Finding(root, 0, f"runtime lacks {label}"))
+    for status in REQUIRED_STATUS_NAMES:
+        if status.casefold() not in lowered:
+            findings.append(Finding(root, 0, f"runtime lacks state {status}"))
+    guessed_endpoint = re.compile(
+        r"(?is)(?:env|environ|os\.environ)\.get\(\s*[\"']"
+        r"CHECKIN_(?:STATUS|ACTION)_PATH[\"']\s*,\s*[\"']/"
+    )
+    for path in source_files:
+        text = read_text(path)
+        match = guessed_endpoint.search(text)
+        if match:
+            findings.append(
+                Finding(
+                    path,
+                    text.count("\n", 0, match.start()) + 1,
+                    "runtime supplies an invented default endpoint path",
+                )
+            )
+    return findings
+
+
+def test_contract_findings(root: Path, tests: Iterable[Path]) -> list[Finding]:
+    test_paths = list(tests)
+    text = "\n".join(read_text(path) for path in test_paths)
+    lowered = text.casefold()
+    findings: list[Finding] = []
+    for status in REQUIRED_STATUS_NAMES:
+        # A response fixture, test name, or comment containing e.g.
+        # ``auth_expired`` is not evidence that the expected result is tested.
+        # Require an explicit domain-state expectation/reference instead.
+        expected_state = re.compile(
+            rf"\bCheckinStatus\s*\.\s*{re.escape(status)}\b",
+            re.IGNORECASE,
+        )
+        if not expected_state.search(text):
+            findings.append(Finding(root / "tests", 0, f"tests lack state assertion for {status}"))
+    required_groups = {
+        "Cookie and Bearer authentication": ("cookie", "bearer"),
+        "CSRF": ("csrf",),
+        "multi-account isolation": ("multi_account", "two_accounts", "multiple account", "多账号"),
+        "timeout": ("timeout",),
+        "429 handling": ("429",),
+        "5xx handling": ("503", "5xx"),
+        "POST duplicate prevention": ("ambiguous_post", "post_is_never_repeated", "防重复"),
+        "redaction": ("redact", "mask", "遮盖"),
+        "network deny guard": ("deny_live_network", "socket audit", "disablenetconnect"),
+    }
+    for label, alternatives in required_groups.items():
+        if label == "Cookie and Bearer authentication":
+            ok = all(term in lowered for term in alternatives)
+        else:
+            ok = any(term in lowered for term in alternatives)
+        if not ok:
+            findings.append(Finding(root / "tests", 0, f"tests lack {label}"))
+
+    url_re = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+    tests_root = root / "tests"
+    if tests_root.is_dir():
+        for path in sorted(tests_root.rglob("*")):
+            if not path.is_file() or path.stat().st_size > MAX_SCANNED_TEXT_BYTES:
+                continue
+            if path.suffix.lower() not in TEXT_SUFFIXES and path.name.casefold() not in SENSITIVE_TEXT_NAMES:
+                continue
+            try:
+                file_text = read_text(path)
+            except (OSError, UnicodeError):
+                continue
+            for number, line in enumerate(file_text.splitlines(), start=1):
+                for match in url_re.finditer(line):
+                    try:
+                        host = urlsplit(match.group(0).rstrip(".,);]")).hostname
+                    except ValueError:
+                        host = None
+                    if host and host not in {"localhost", "127.0.0.1", "::1"} and not host.endswith(".invalid"):
+                        findings.append(Finding(path, number, "test data contains a non-reserved network URL"))
+    return list(dict.fromkeys(findings))
+
+
 def test_files(root: Path) -> list[Path]:
     tests = root / "tests"
     if not tests.is_dir():
@@ -822,12 +1019,33 @@ def workflow_has_manual_trigger(text: str) -> bool:
 
 
 def workflow_has_iana_timezone(text: str) -> bool:
-    visible = without_yaml_comments(text)
-    timezone_re = re.compile(
-        r"(?im)^\s*(?:timezone|[A-Z][A-Z0-9_]*_TIMEZONE)\s*:\s*"
-        r"[\"']?([A-Za-z][A-Za-z0-9_+.-]*/[A-Za-z0-9_+./-]+)[\"']?\s*$"
-    )
-    return bool(timezone_re.search(visible))
+    """Require every cron schedule item to carry its own literal IANA timezone."""
+
+    on_children = top_level_children(text, "on")
+    if not on_children:
+        return False
+    schedule_items = 0
+    for _, inline, children in mapping_blocks("\n".join(on_children), "schedule"):
+        if inline or not children:
+            continue
+        starts = [
+            index
+            for index, line in enumerate(children)
+            if re.match(r"^\s*-\s*cron\s*:", line, re.IGNORECASE)
+        ]
+        for position, start in enumerate(starts):
+            end = starts[position + 1] if position + 1 < len(starts) else len(children)
+            item = "\n".join(children[start:end])
+            cron_match = re.search(r"(?mi)^\s*-\s*cron\s*:\s*(.*?)\s*$", item)
+            timezone_match = re.search(
+                r"(?mi)^\s+timezone\s*:\s*[\"']?"
+                r"([A-Za-z][A-Za-z0-9_+.-]*/[A-Za-z0-9_+./-]+)[\"']?\s*$",
+                item,
+            )
+            if not cron_match or not has_cron_expression(cron_match.group(1)) or not timezone_match:
+                return False
+            schedule_items += 1
+    return schedule_items > 0
 
 
 def workflow_has_concurrency(text: str) -> bool:
@@ -1242,6 +1460,49 @@ def qinglong_manual_command(files: Iterable[Path]) -> bool:
     return False
 
 
+def qinglong_contract_findings(root: Path, files: Iterable[Path]) -> list[Finding]:
+    paths = list(files)
+    if not paths:
+        return []
+    findings: list[Finding] = []
+    chunks: list[str] = []
+    for path in paths:
+        try:
+            chunks.append(read_text(path))
+        except (OSError, UnicodeError) as exc:
+            findings.append(Finding(path, 0, f"QingLong documentation cannot be read: {type(exc).__name__}"))
+    text = "\n".join(chunks)
+    lowered = text.casefold()
+    shared_entry = re.compile(
+        r"(?im)(?:python3?|py\s+-3)\s+(?:run\.py|-m\s+checkin\.main)\b"
+    )
+    task_command = re.compile(
+        r"(?im)\bcd\s+[^\r\n`]+\s+&&\s+(?:python3?|py\s+-3)\s+(?:run\.py|-m\s+checkin\.main)\b"
+    )
+    dependency_install = re.compile(
+        r"(?im)(?:python3?|py\s+-3)\s+-m\s+pip\s+install\b[^\r\n]*-r\s+requirements\.txt"
+    )
+    required = {
+        "shared Python business entry": bool(shared_entry.search(text)),
+        "direct task command with project directory": bool(task_command.search(text)),
+        "five-field cron": qinglong_has_schedule(paths),
+        "pinned dependency installation": bool(dependency_install.search(text)),
+        "offline test command": "tests/run_offline.py" in text,
+        "IANA timezone configuration": "checkin_timezone" in lowered and bool(re.search(r"[A-Za-z]+/[A-Za-z0-9_+./-]+", text)),
+        "single/multi-account environment variables": "checkin_accounts" in lowered and "checkin_base_url" in lowered,
+        "verified endpoint variables": "checkin_status_path" in lowered and "checkin_action_path" in lowered,
+        "dependency and environment troubleshooting": "troubleshoot" in lowered or "排障" in lowered,
+        "disable instructions": "disable" in lowered or "禁用" in lowered,
+    }
+    for label, ok in required.items():
+        if not ok:
+            findings.append(Finding(paths[0], 0, f"QingLong deployment lacks {label}"))
+    for status in REQUIRED_STATUS_NAMES:
+        if status.casefold() not in lowered:
+            findings.append(Finding(paths[0], 0, f"QingLong troubleshooting lacks state {status}"))
+    return findings
+
+
 def redaction_evidence(root: Path, tests: Iterable[Path]) -> tuple[list[Path], list[Path]]:
     implementation: list[Path] = []
     test_evidence: list[Path] = []
@@ -1324,6 +1585,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             readme_detail = f"cannot read UTF-8 text: {exc}"
     reporter.check("README", readme_ok, readme_detail)
 
+    readme_findings = readme_contract_findings(root)
+    reporter.check(
+        "README operational contract",
+        not readme_findings,
+        format_findings(root, readme_findings),
+    )
+
+    analysis_findings = site_analysis_findings(root)
+    reporter.check(
+        "site-analysis evidence contract",
+        not analysis_findings,
+        format_findings(root, analysis_findings),
+    )
+
     env_example = root / ".env.example"
     env_ok = nonempty_file(env_example)
     env_detail = ".env.example is missing or empty" if not env_ok else ""
@@ -1354,6 +1629,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "pinned dependency requirements",
         not dependency_findings,
         format_findings(root, dependency_findings),
+    )
+
+    parse_findings = syntax_findings(root)
+    reporter.check(
+        "Python, TOML, and JSON syntax",
+        not parse_findings,
+        format_findings(root, parse_findings),
+    )
+
+    runtime_findings = runtime_contract_findings(root)
+    reporter.check(
+        "runtime authentication and state contract",
+        not runtime_findings,
+        format_findings(root, runtime_findings),
     )
 
     oversized = [
@@ -1389,6 +1678,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "offline tests do not contact live services",
         not offline_findings,
         format_findings(root, offline_findings),
+    )
+    required_test_findings = test_contract_findings(root, tests)
+    reporter.check(
+        "required offline test scenarios",
+        not required_test_findings,
+        format_findings(root, required_test_findings),
     )
 
     workflows = workflow_files(root)
@@ -1441,6 +1736,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     reporter.check("manual run entry", manual_ok, manual_details)
 
+    qinglong_findings = qinglong_contract_findings(root, qinglong)
+    reporter.check(
+        "QingLong deployment contract",
+        not qinglong_findings,
+        (
+            "not applicable (GitHub-only project)"
+            if not qinglong
+            else format_findings(root, qinglong_findings)
+        ),
+    )
+
     permission_findings: list[Finding] = []
     for workflow, text in workflow_texts:
         issue = workflow_permission_issue(text)
@@ -1485,7 +1791,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     timezone_findings = workflow_contract_findings(
         workflow_has_iana_timezone,
-        "missing a literal IANA Area/Location timezone",
+        "each cron schedule item must include its own literal IANA Area/Location timezone",
     )
     reporter.check(
         "GitHub workflow IANA timezone",

@@ -102,6 +102,8 @@
 
 若项目选择 pytest，则改用 `python -m pytest -q`，并在依赖清单中明确固定或约束 pytest 版本。
 
+若用户提供的是现有 Node.js 项目，使用其锁文件对应的 `npm ci`、`npm test`/项目实际测试命令和 lint；继续强制断网 mock、秘密扫描、POST 防重复与部署检查。仓库内 `validate_generated_project.py` 只验收 Python 生成项目，不得把它的通过结果用于证明 Node.js 项目正确。
+
 根据项目实际工具补充 YAML 解析和静态检查。然后确认：
 
 - 默认测试全程离线；

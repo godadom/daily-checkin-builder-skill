@@ -11,8 +11,8 @@ For each account, the service queries today's state, obtains a CSRF token, sends
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `CHECKIN_BASE_URL` | yes | Authorized HTTPS origin, without credentials |
-| `CHECKIN_STATUS_PATH` | no | Status endpoint; default `/api/checkin/status` |
-| `CHECKIN_ACTION_PATH` | no | Check-in endpoint; default `/api/checkin` |
+| `CHECKIN_STATUS_PATH` | yes | Status endpoint established by `docs/site-analysis.md`; no runtime default |
+| `CHECKIN_ACTION_PATH` | yes | Check-in endpoint established by `docs/site-analysis.md`; no runtime default |
 | `CHECKIN_AUTH_TYPE` | single account | `bearer`, `cookie`, or `api_key` |
 | `CHECKIN_TOKEN` / `CHECKIN_COOKIE` / `CHECKIN_API_KEY` | single account | Secret matching the auth type |
 | `CHECKIN_ACCOUNT_NAME` | no | Non-secret log label |
@@ -45,7 +45,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. The pinned `tzdata` package supplies a consistent IANA database on Windows and minimal containers, while `zoneinfo.ZoneInfo` validates the configured zone. Tests inject mock HTTP responses and never contact a real site. A live run occurs only when valid environment configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. The pinned `tzdata` package supplies a consistent IANA database on Windows and minimal containers, while `zoneinfo.ZoneInfo` validates the configured zone. Tests inject mock HTTP responses and never contact a real site. Both endpoint paths are mandatory so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid environment configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
 
 ## Deployment
 

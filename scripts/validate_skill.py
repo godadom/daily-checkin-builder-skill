@@ -38,6 +38,8 @@ GENERATED_PROJECT_DIRECTORIES = (
     "assets/templates/python-checkin",
     "examples/fictional-checkin",
 )
+TRIGGER_VALIDATOR = "scripts/validate_trigger_routing.py"
+VALIDATOR_SELF_TEST = "scripts/test_validators.py"
 
 MARKDOWN_LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 TODO_RE = re.compile(
@@ -681,6 +683,76 @@ def validate_bundled_project(root: Path, relative: str) -> tuple[bool, str]:
     return False, (output[-800:] or f"validator exited {completed.returncode}")
 
 
+def validate_trigger_routing(root: Path) -> tuple[bool, str]:
+    validator = root / TRIGGER_VALIDATOR
+    if not validator.is_file():
+        return False, f"missing validator: {TRIGGER_VALIDATOR}"
+    try:
+        child_env = {
+            key: os.environ[key]
+            for key in ("COMSPEC", "PATH", "PATHEXT", "SYSTEMROOT", "TEMP", "TMP", "WINDIR")
+            if key in os.environ
+        }
+        child_env["PYTHONIOENCODING"] = "utf-8"
+        completed = subprocess.run(
+            [sys.executable, str(validator), str(root)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            env=child_env,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"could not run trigger validator: {type(exc).__name__}"
+    if completed.returncode == 0:
+        final_line = next(
+            (line.strip() for line in reversed(completed.stdout.splitlines()) if line.strip()),
+            "trigger cases passed",
+        )
+        return True, final_line
+    output = " ".join(
+        line.strip()
+        for line in (completed.stdout + "\n" + completed.stderr).splitlines()
+        if line.strip()
+    )
+    return False, (output[-1200:] or f"validator exited {completed.returncode}")
+
+
+def validate_validator_mutations(root: Path) -> tuple[bool, str]:
+    validator = root / VALIDATOR_SELF_TEST
+    if not validator.is_file():
+        return False, f"missing validator self-test: {VALIDATOR_SELF_TEST}"
+    try:
+        child_env = {
+            key: os.environ[key]
+            for key in ("COMSPEC", "PATH", "PATHEXT", "SYSTEMROOT", "TEMP", "TMP", "WINDIR")
+            if key in os.environ
+        }
+        child_env["PYTHONIOENCODING"] = "utf-8"
+        completed = subprocess.run(
+            [sys.executable, str(validator)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=child_env,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"could not run validator self-test: {type(exc).__name__}"
+    if completed.returncode == 0:
+        final_line = next(
+            (line.strip() for line in reversed(completed.stdout.splitlines()) if line.strip()),
+            "validator mutations passed",
+        )
+        return True, final_line
+    output = " ".join(
+        line.strip()
+        for line in (completed.stdout + "\n" + completed.stderr).splitlines()
+        if line.strip()
+    )
+    return False, (output[-1600:] or f"validator self-test exited {completed.returncode}")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     root = normalize_root(args.path)
@@ -885,6 +957,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         not unlinked_refs,
         "not linked from SKILL.md: " + ", ".join(unlinked_refs) if unlinked_refs else "",
     )
+
+    routing_ok, routing_detail = validate_trigger_routing(root)
+    reporter.check("executable trigger routing", routing_ok, routing_detail)
+
+    mutations_ok, mutations_detail = validate_validator_mutations(root)
+    reporter.check("validator negative mutations", mutations_ok, mutations_detail)
 
     for relative in GENERATED_PROJECT_DIRECTORIES:
         bundled_ok, bundled_detail = validate_bundled_project(root, relative)

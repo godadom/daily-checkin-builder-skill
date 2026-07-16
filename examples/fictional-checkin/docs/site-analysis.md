@@ -12,6 +12,8 @@ Keep this file free of real cookies, tokens, account identifiers, and personal d
 
 ## Observed flow
 
+Runtime configuration deliberately has no default endpoint paths; it must use the two paths established by this fictional evidence or fail before any request is sent.
+
 1. The fabricated transcript observes a bearer token. Cookie and API-key support are generic template capabilities, not observed facts for this example.
 2. `GET /v1/daily/status` returns business code `0`, a Boolean `data.checked_in`, and a CSRF token when not checked in.
 3. `POST /v1/daily/claim` sends JSON plus `X-CSRF-Token`.

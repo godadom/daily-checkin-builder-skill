@@ -12,7 +12,7 @@ Keep this file free of real cookies, tokens, account identifiers, and personal d
 
 ## Baseline contract (not site evidence)
 
-The values below are reserved-domain scaffolding. A generated project must replace them only with facts established by authorized, sanitized evidence; delete unsupported authentication modes, fields, and business codes instead of guessing.
+The values below are reserved-domain scaffolding. A generated project must replace them only with facts established by authorized, sanitized evidence; delete unsupported authentication modes, fields, and business codes instead of guessing. Runtime configuration deliberately has no default endpoint paths, so an unfinished analysis fails before any request is sent.
 
 1. The baseline can authenticate through one configured bearer token, cookie, or API key; retain only the evidenced mode.
 2. `GET /api/checkin/status` returns business code `0`, a Boolean `data.checked_in`, and a CSRF token when not checked in.
