@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fictional-rewards-checkin-example"
+version = "0.1.0"
+description = "Offline-safe example generated from a fictional sanitized check-in request"
+requires-python = ">=3.11"
+dependencies = ["tzdata==2026.3"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

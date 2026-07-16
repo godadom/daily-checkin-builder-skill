@@ -1,0 +1,57 @@
+name: Daily check-in
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 07:17 in the configured IANA timezone; minute 17 avoids the hourly peak.
+    - cron: "17 7 * * *"
+      timezone: "Asia/Shanghai"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-checkin-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  CHECKIN_TIMEZONE: Asia/Shanghai
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  check-in:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Run offline tests
+        run: python tests/run_offline.py
+      - name: Run authorized check-in
+        env:
+          CHECKIN_BASE_URL: ${{ vars.CHECKIN_BASE_URL }}
+          CHECKIN_STATUS_PATH: ${{ vars.CHECKIN_STATUS_PATH }}
+          CHECKIN_ACTION_PATH: ${{ vars.CHECKIN_ACTION_PATH }}
+          CHECKIN_ACCOUNTS: ${{ secrets.CHECKIN_ACCOUNTS }}
+          CHECKIN_CONNECT_TIMEOUT: "5"
+          CHECKIN_READ_TIMEOUT: "15"
+          CHECKIN_MAX_RETRIES: "2"
+          CHECKIN_JITTER_MAX_SECONDS: "180"
+          CHECKIN_NOTIFY_MODE: log
+        run: python run.py
+      - name: Optional job-summary notification
+        if: ${{ always() && vars.CHECKIN_WRITE_JOB_SUMMARY == 'true' }}
+        run: echo "Daily check-in job finished. Review the redacted result log for account states." >> "$GITHUB_STEP_SUMMARY"
+      - name: Record failure without exposing credentials
+        if: failure()
+        run: echo "Check-in failed. Review redacted job logs and refresh repository secrets if authentication expired."

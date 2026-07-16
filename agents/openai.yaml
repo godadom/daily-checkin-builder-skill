@@ -1,0 +1,7 @@
+interface:
+  display_name: "Daily Check-in Builder"
+  short_description: "Build secure, tested daily check-in automation"
+  default_prompt: "Use $daily-checkin-builder to analyze this authorized, sanitized check-in flow and generate a tested deployment-ready project."
+
+policy:
+  allow_implicit_invocation: true
