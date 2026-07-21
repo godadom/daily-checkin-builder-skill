@@ -36,7 +36,7 @@ jobs:
       - name: Install actionlint
         run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: Parse GitHub Actions workflows
-        run: $(go env GOPATH)/bin/actionlint .github/workflows/validate.yml assets/templates/python-checkin/.github/workflows/daily-checkin.yml examples/fictional-checkin/.github/workflows/daily-checkin.yml
+        run: '"$(go env GOPATH)/bin/actionlint" .github/workflows/validate.yml assets/templates/python-checkin/.github/workflows/daily-checkin.yml examples/fictional-checkin/.github/workflows/daily-checkin.yml'
       - name: Validate skill and bundled projects
         run: python scripts/validate_skill.py .
       - name: Validate template mode
