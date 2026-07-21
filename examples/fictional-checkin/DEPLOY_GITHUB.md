@@ -1,7 +1,7 @@
 # GitHub Actions deployment
 
 1. In repository Settings, create Actions secret `CHECKIN_ACCOUNTS` using the JSON format in `README.md`. For a single account, a one-item array is recommended.
-2. Create repository variables `CHECKIN_BASE_URL`, `CHECKIN_STATUS_PATH`, and `CHECKIN_ACTION_PATH`. Values must come from sanitized, verified analysis. Optionally set `CHECKIN_WRITE_JOB_SUMMARY=true` to enable the credential-free job-summary notification step; omit it or set it to `false` to disable that step.
+2. The verified, non-secret origin and endpoint paths are already in `src/checkin/site_config.py`; do not create repository variables for them. Optionally set `CHECKIN_WRITE_JOB_SUMMARY=true` to enable the credential-free job-summary notification step; omit it or set it to `false` to disable that step.
 3. Open Actions, select **Daily check-in**, and use **Run workflow**. The job runs offline tests before the check-in.
 4. Inspect only the redacted result lines. Refresh an expired secret by replacing it in Settings; never print it for diagnosis.
 

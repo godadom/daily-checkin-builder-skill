@@ -17,6 +17,7 @@
     generated-checkin/
     ├── src/checkin/
     │   ├── __init__.py
+    │   ├── site_config.py
     │   ├── config.py
     │   ├── client.py
     │   ├── auth.py
@@ -160,6 +161,8 @@
 ## 标记模板与站点实现
 
 让可复用骨架的 `docs/site-contract.json` 使用 `analysis_status: template` 和 `implementation_status: scaffold`。只有完成授权取证、替换基线契约并让实现与 `site-analysis.md` 一致后，才改为 `verified` 与 `site_specific`。模板模式只验证骨架安全；交付项目必须通过生成项目模式，后者应拒绝模板域名、基线标题和 scaffold 占位符残留。测试目录中的脱敏 fixture 和保留域名不属于残留。
+
+将已验证、固定且非敏感的站点事实写入 `src/checkin/site_config.py`：HTTPS origin、状态/签到路径、固定公开请求头和公开字段名。它们必须来自 `site-analysis.md`，而非 GitHub Variables、青龙环境变量或本地 `.env`。环境变量只携带秘密和可变运行参数；实现应拒绝 `CHECKIN_BASE_URL`、`CHECKIN_STATUS_PATH` 与 `CHECKIN_ACTION_PATH` 这类运行时覆盖，避免部署配置悄悄偏离已审计契约。
 
 ## 生成必需文档
 

@@ -60,12 +60,22 @@ def remove_schedule_timezone(project: Path) -> None:
     replace_once(workflow, '      timezone: "Asia/Shanghai"\n', "")
 
 
+def inject_fixed_site_value_into_workflow(project: Path) -> None:
+    workflow = project / ".github" / "workflows" / "daily-checkin.yml"
+    replace_once(
+        workflow,
+        "          CHECKIN_ACCOUNTS: ${{ secrets.CHECKIN_ACCOUNTS }}\n",
+        "          CHECKIN_BASE_URL: https://example.invalid\n"
+        "          CHECKIN_ACCOUNTS: ${{ secrets.CHECKIN_ACCOUNTS }}\n",
+    )
+
+
 def add_guessed_endpoint(project: Path) -> None:
     config = project / "src" / "checkin" / "config.py"
     replace_once(
         config,
-        'env.get("CHECKIN_STATUS_PATH", "").strip()',
-        'env.get("CHECKIN_STATUS_PATH", "/api/guessed-status").strip()',
+        "status_path_value = site_config.STATUS_PATH.strip()",
+        'status_path_value = "/api/guessed-status"',
     )
 
 
@@ -120,6 +130,11 @@ def main() -> int:
             "missing per-schedule timezone",
             remove_schedule_timezone,
             "each cron schedule item must include its own literal IANA Area/Location timezone",
+        ),
+        (
+            "fixed site value injected through workflow environment",
+            inject_fixed_site_value_into_workflow,
+            "must not inject fixed site values through environment variables",
         ),
         ("guessed runtime endpoint", add_guessed_endpoint, "runtime supplies an invented default endpoint path"),
         ("invalid Python syntax", break_python_syntax, "invalid Python"),

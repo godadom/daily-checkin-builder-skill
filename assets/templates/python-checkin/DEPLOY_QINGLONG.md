@@ -17,7 +17,7 @@ After each project update, pull or upload the new files, rerun the same dependen
 
 ## Configure the environment
 
-Create panel environment variables from `.env.example`. Required values are `CHECKIN_BASE_URL`, `CHECKIN_STATUS_PATH`, and `CHECKIN_ACTION_PATH`, plus either the single-account authentication fields or one `CHECKIN_ACCOUNTS` JSON array. The origin and both paths must come from an authorized, sanitized site analysis; the application has no fallback endpoint paths. Store secrets only in QingLong's protected environment-variable store, disable any value that is no longer used, and never paste secrets into logs or commands.
+Before deployment, put the verified non-secret origin and paths in `src/checkin/site_config.py` from an authorized, sanitized site analysis. Create QingLong environment variables from `.env.example` only for authentication and runtime choices: use `CHECKIN_ACCOUNTS` for multi-account secrets, or `CHECKIN_AUTH_TYPE` plus `CHECKIN_TOKEN`, `CHECKIN_COOKIE`, or `CHECKIN_API_KEY` for one account. The application rejects `CHECKIN_BASE_URL`, `CHECKIN_STATUS_PATH`, and `CHECKIN_ACTION_PATH` overrides. Store secrets only in QingLong's protected environment-variable store, disable any value that is no longer used, and never paste secrets into logs or commands.
 
 Set `CHECKIN_TIMEZONE` to the same IANA zone used by the panel scheduler. `CHECKIN_NOTIFY_MODE=log` enables the built-in redacted stdout summary; `CHECKIN_NOTIFY_MODE=off` disables that summary. No external notification sender is bundled. Add one only as an explicit, environment-configured adapter that receives the already-redacted summary; notification failure must not alter the check-in exit status.
 

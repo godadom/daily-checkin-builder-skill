@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest import mock
 
 from helpers import account
 from checkin.auth import authentication_headers
+from checkin import site_config
 from checkin.config import ConfigError, load_settings
 
 
 def valid_env(**overrides):
     env = {
-        "CHECKIN_BASE_URL": "https://checkin.example.invalid",
-        "CHECKIN_STATUS_PATH": "/api/checkin/status",
-        "CHECKIN_ACTION_PATH": "/api/checkin",
         "CHECKIN_TOKEN": "placeholder",
     }
     env.update(overrides)
@@ -24,7 +23,7 @@ class ConfigTests(unittest.TestCase):
         env = valid_env()
         settings = load_settings(env)
         self.assertEqual(settings.base_url, "https://checkin.example.invalid")
-        with self.assertRaisesRegex(ConfigError, "HTTPS origin"):
+        with self.assertRaisesRegex(ConfigError, "site_config.py, not environment"):
             load_settings({**env, "CHECKIN_BASE_URL": "http://unsafe.invalid"})
         with self.assertRaisesRegex(ConfigError, "installed IANA timezone"):
             load_settings({**env, "CHECKIN_TIMEZONE": "Shanghai"})
@@ -36,12 +35,10 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(load_settings({**env, "CHECKIN_NOTIFY_MODE": "off"}).notify_mode, "off")
 
     def test_endpoint_paths_are_required_instead_of_guessed(self):
-        for missing in ("CHECKIN_STATUS_PATH", "CHECKIN_ACTION_PATH"):
-            with self.subTest(missing=missing):
-                env = valid_env()
-                del env[missing]
-                with self.assertRaisesRegex(ConfigError, f"set {missing} from verified site-analysis evidence"):
-                    load_settings(env)
+        for name in ("STATUS_PATH", "CHECKIN_PATH"):
+            with self.subTest(name=name), mock.patch.object(site_config, name, ""):
+                with self.assertRaisesRegex(ConfigError, f"site_config.{name}"):
+                    load_settings(valid_env())
 
     def test_origin_and_endpoint_paths_cannot_change_request_authority(self):
         env = valid_env()
@@ -51,23 +48,31 @@ class ConfigTests(unittest.TestCase):
             "https://checkin.example.invalid/#fragment",
             "https://user:fixture-secret@checkin.example.invalid",
         ):
-            with self.subTest(origin=unsafe_origin), self.assertRaisesRegex(ConfigError, "HTTPS origin"):
-                load_settings({**env, "CHECKIN_BASE_URL": unsafe_origin})
+            with self.subTest(origin=unsafe_origin), mock.patch.object(site_config, "BASE_URL", unsafe_origin), self.assertRaisesRegex(ConfigError, "HTTPS origin"):
+                load_settings(env)
         for key, value in (
-            ("CHECKIN_STATUS_PATH", "//other.example.invalid/status"),
-            ("CHECKIN_ACTION_PATH", "https://other.example.invalid/checkin"),
-            ("CHECKIN_ACTION_PATH", "/api/checkin#fragment"),
+            ("STATUS_PATH", "//other.example.invalid/status"),
+            ("CHECKIN_PATH", "https://other.example.invalid/checkin"),
+            ("CHECKIN_PATH", "/api/checkin#fragment"),
         ):
             with self.subTest(key=key, value=value), self.assertRaisesRegex(ConfigError, "same-origin path"):
-                load_settings({**env, key: value})
+                with mock.patch.object(site_config, key, value):
+                    load_settings(env)
         with self.assertRaisesRegex(ConfigError, "must not contain credentials"):
-            load_settings({**env, "CHECKIN_STATUS_PATH": "/api/status?access%5Ftoken=fixture-secret"})
+            with mock.patch.object(site_config, "STATUS_PATH", "/api/status?access%5Ftoken=fixture-secret"):
+                load_settings(env)
         with self.assertRaisesRegex(ConfigError, "must not contain credentials"):
-            load_settings({**env, "CHECKIN_STATUS_PATH": "/api/status?locale=en;password=fixture-secret"})
+            with mock.patch.object(site_config, "STATUS_PATH", "/api/status?locale=en;password=fixture-secret"):
+                load_settings(env)
         self.assertEqual(
-            load_settings({**env, "CHECKIN_STATUS_PATH": "/api/status?locale=en"}).status_path,
-            "/api/status?locale=en",
+            load_settings(env).status_path,
+            "/api/checkin/status",
         )
+        with mock.patch.object(site_config, "STATUS_PATH", "/api/status?locale=en"):
+            self.assertEqual(
+                load_settings(env).status_path,
+                "/api/status?locale=en",
+            )
 
     def test_single_account_parsing(self):
         settings = load_settings(valid_env(
@@ -118,10 +123,11 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ConfigError, "valid HTTP header"):
             load_settings(valid_env(CHECKIN_ACCOUNTS=unsafe_account))
         for unsafe_url in ("https:" + "//[", "https://checkin.example.invalid:99999"):
-            with self.subTest(url=unsafe_url), self.assertRaisesRegex(ConfigError, "valid HTTPS origin"):
-                load_settings({**env, "CHECKIN_BASE_URL": unsafe_url})
+            with self.subTest(url=unsafe_url), mock.patch.object(site_config, "BASE_URL", unsafe_url), self.assertRaisesRegex(ConfigError, "valid HTTPS origin"):
+                load_settings(env)
         with self.assertRaisesRegex(ConfigError, "control characters"):
-            load_settings({**env, "CHECKIN_STATUS_PATH": "/api/status\r\nInjected"})
+            with mock.patch.object(site_config, "STATUS_PATH", "/api/status\r\nInjected"):
+                load_settings(env)
         unsafe_secret = "placeholder" + chr(13) + chr(10) + "Injected"
         with self.assertRaisesRegex(ConfigError, "control characters"):
             load_settings({**env, "CHECKIN_TOKEN": unsafe_secret})

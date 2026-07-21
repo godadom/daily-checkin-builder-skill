@@ -10,11 +10,10 @@ The fictional evidence maps `GET /v1/daily/status` to the preflight/status query
 
 ## Configuration
 
+The verified, non-secret fictional site facts are source-controlled in `src/checkin/site_config.py`. Do not set or override them through environment variables; use environment variables only for secrets and runtime choices.
+
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `CHECKIN_BASE_URL` | yes | Authorized HTTPS origin, without credentials |
-| `CHECKIN_STATUS_PATH` | yes | Status endpoint established by `docs/site-analysis.md`; no runtime default |
-| `CHECKIN_ACTION_PATH` | yes | Check-in endpoint established by `docs/site-analysis.md`; no runtime default |
 | `CHECKIN_AUTH_TYPE` | single account | `bearer`, `cookie`, or `api_key` |
 | `CHECKIN_TOKEN` / `CHECKIN_COOKIE` / `CHECKIN_API_KEY` | single account | Secret matching the auth type |
 | `CHECKIN_ACCOUNT_NAME` | no | Non-secret log label |
@@ -47,7 +46,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: cookie responses update only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. Tests inject mock HTTP responses and never contact a real site. Both endpoint paths are mandatory so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid environment configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: cookie responses update only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
 
 ## Deployment
 

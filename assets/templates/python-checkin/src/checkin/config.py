@@ -1,4 +1,4 @@
-"""Parse and validate environment-only configuration."""
+"""Parse secret/operational configuration and validate the site contract."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import Mapping
 from urllib.parse import parse_qsl, urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import site_config
 from .models import AccountConfig
 
 
@@ -23,6 +24,7 @@ HEADER_NAME_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 SENSITIVE_FIELD_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 TIMEZONE_RE = re.compile(r"^[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*$")
 MAX_ACCOUNTS = 50
+SITE_OVERRIDE_KEYS = ("CHECKIN_BASE_URL", "CHECKIN_STATUS_PATH", "CHECKIN_ACTION_PATH", "CHECKIN_USER_AGENT")
 
 
 @dataclass(frozen=True)
@@ -170,15 +172,21 @@ def _endpoint_path(value: str, name: str) -> str:
 
 def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if environ is None else environ
-    base_url = env.get("CHECKIN_BASE_URL", "").strip().rstrip("/")
+    overrides = [key for key in SITE_OVERRIDE_KEYS if key in env]
+    if overrides:
+        raise ConfigError(
+            "verified fixed site values belong in src/checkin/site_config.py, not environment variables: "
+            + ", ".join(overrides)
+        )
+    base_url = site_config.BASE_URL.strip().rstrip("/")
     if any(character.isspace() or ord(character) == 127 for character in base_url):
-        raise ConfigError("CHECKIN_BASE_URL must not contain whitespace or control characters")
+        raise ConfigError("site_config.BASE_URL must not contain whitespace or control characters")
     try:
         parsed = urlsplit(base_url)
         parsed.port
         hostname = parsed.hostname
     except ValueError as exc:
-        raise ConfigError("CHECKIN_BASE_URL must be a valid HTTPS origin") from exc
+        raise ConfigError("site_config.BASE_URL must be a valid HTTPS origin") from exc
     if (
         parsed.scheme != "https"
         or not parsed.netloc
@@ -189,16 +197,23 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         or parsed.query
         or parsed.fragment
     ):
-        raise ConfigError("CHECKIN_BASE_URL must be an HTTPS origin without credentials, path, query, or fragment")
+        raise ConfigError("site_config.BASE_URL must be an HTTPS origin without credentials, path, query, or fragment")
     base_url = f"https://{parsed.netloc}"
-    status_path_value = env.get("CHECKIN_STATUS_PATH", "").strip()
-    checkin_path_value = env.get("CHECKIN_ACTION_PATH", "").strip()
+    status_path_value = site_config.STATUS_PATH.strip()
+    checkin_path_value = site_config.CHECKIN_PATH.strip()
     if not status_path_value:
-        raise ConfigError("set CHECKIN_STATUS_PATH from verified site-analysis evidence")
+        raise ConfigError("set site_config.STATUS_PATH from verified site-analysis evidence")
     if not checkin_path_value:
-        raise ConfigError("set CHECKIN_ACTION_PATH from verified site-analysis evidence")
-    status_path = _endpoint_path(status_path_value, "CHECKIN_STATUS_PATH")
-    checkin_path = _endpoint_path(checkin_path_value, "CHECKIN_ACTION_PATH")
+        raise ConfigError("set site_config.CHECKIN_PATH from verified site-analysis evidence")
+    status_path = _endpoint_path(status_path_value, "site_config.STATUS_PATH")
+    checkin_path = _endpoint_path(checkin_path_value, "site_config.CHECKIN_PATH")
+    user_agent = site_config.USER_AGENT
+    if (
+        not isinstance(user_agent, str)
+        or not user_agent.strip()
+        or any(character.isspace() and character not in {" ", "\t"} or ord(character) == 127 for character in user_agent)
+    ):
+        raise ConfigError("site_config.USER_AGENT must be a non-empty safe HTTP header value")
     connect_timeout = float(_number(env, "CHECKIN_CONNECT_TIMEOUT", "5", float, minimum=0.1, maximum=120))
     read_timeout = float(_number(env, "CHECKIN_READ_TIMEOUT", "15", float, minimum=0.1, maximum=120))
     timezone = env.get("CHECKIN_TIMEZONE", "Asia/Shanghai").strip()
@@ -223,4 +238,5 @@ def load_settings(environ: Mapping[str, str] | None = None) -> Settings:
         jitter_max_seconds=int(_number(env, "CHECKIN_JITTER_MAX_SECONDS", "0", int, minimum=0, maximum=900)),
         timezone=timezone,
         notify_mode=notify_mode,
+        user_agent=user_agent,
     )

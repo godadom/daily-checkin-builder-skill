@@ -786,6 +786,7 @@ def runtime_contract_findings(root: Path) -> list[Finding]:
     lowered = combined.casefold()
     findings: list[Finding] = []
     required_groups = {
+        "source-controlled fixed site contract": ("site_config", "base_url"),
         "Cookie authentication": ("cookie",),
         "Bearer authentication": ("bearer", "authorization"),
         "CSRF handling": ("csrf",),
@@ -799,6 +800,25 @@ def runtime_contract_findings(root: Path) -> list[Finding]:
     for status in REQUIRED_STATUS_NAMES:
         if status.casefold() not in lowered:
             findings.append(Finding(root, 0, f"runtime lacks state {status}"))
+    site_config_path = root / "src" / "checkin" / "site_config.py"
+    if not nonempty_file(site_config_path):
+        findings.append(Finding(site_config_path, 0, "runtime lacks src/checkin/site_config.py for fixed site values"))
+    fixed_value_outside_contract = re.compile(
+        r"(?m)^\s*(?:status_path_value|checkin_path_value)\s*=\s*[\"']/"
+    )
+    for path in source_files:
+        if path.name == "site_config.py":
+            continue
+        text = read_text(path)
+        match = fixed_value_outside_contract.search(text)
+        if match:
+            findings.append(
+                Finding(
+                    path,
+                    text.count("\n", 0, match.start()) + 1,
+                    "runtime supplies an invented default endpoint path",
+                )
+            )
     guessed_endpoint = re.compile(
         r"(?is)(?:env|environ|os\.environ)\.get\(\s*[\"']"
         r"CHECKIN_(?:STATUS|ACTION)_PATH[\"']\s*,\s*[\"']/"
@@ -1349,10 +1369,12 @@ def workflow_safety_findings(path: Path, text: str) -> list[Finding]:
                 findings.append(Finding(path, 0, "check-in step must use one block-style env mapping"))
                 continue
             env_keys = {key for key, _ in direct_mapping_entries(env_blocks[0][2])}
-            required = {"checkin_base_url", "checkin_status_path", "checkin_action_path"}
             auth_options = {"checkin_accounts", "checkin_token", "checkin_cookie", "checkin_api_key"}
-            if not required.issubset(env_keys) or not (env_keys & auth_options):
-                findings.append(Finding(path, 0, "check-in step lacks endpoint or authentication environment values"))
+            fixed_site_keys = {"checkin_base_url", "checkin_status_path", "checkin_action_path", "checkin_user_agent"}
+            if not (env_keys & auth_options):
+                findings.append(Finding(path, 0, "check-in step lacks authentication environment values"))
+            if env_keys & fixed_site_keys:
+                findings.append(Finding(path, 0, "check-in step must not inject fixed site values through environment variables"))
 
     secret_reference = re.compile(r"\$\{\{(?:(?!\}\}).)*\bsecrets\s*(?:\.|\[)", re.IGNORECASE)
     allowed_secret = re.compile(
@@ -1506,14 +1528,11 @@ def qinglong_contract_findings(root: Path, files: Iterable[Path]) -> list[Findin
         "pinned dependency installation": bool(dependency_install.search(text)),
         "offline test command": "tests/run_offline.py" in text,
         "IANA timezone configuration": "checkin_timezone" in lowered and bool(re.search(r"[A-Za-z]+/[A-Za-z0-9_+./-]+", text)),
-        "single/multi-account environment variables": (
-            "checkin_base_url" in lowered
-            and any(
+        "single/multi-account environment variables": any(
                 name in lowered
                 for name in ("checkin_accounts", "checkin_cookie", "checkin_token", "checkin_api_key")
-            )
-        ),
-        "verified endpoint variables": "checkin_status_path" in lowered and "checkin_action_path" in lowered,
+            ),
+        "source-controlled verified site contract": "site_config.py" in lowered,
         "dependency and environment troubleshooting": "troubleshoot" in lowered or "排障" in lowered,
         "disable instructions": "disable" in lowered or "禁用" in lowered,
     }

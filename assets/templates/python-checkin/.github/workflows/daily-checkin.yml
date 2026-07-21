@@ -39,9 +39,6 @@ jobs:
         run: python tests/run_offline.py
       - name: Run authorized check-in
         env:
-          CHECKIN_BASE_URL: ${{ vars.CHECKIN_BASE_URL }}
-          CHECKIN_STATUS_PATH: ${{ vars.CHECKIN_STATUS_PATH }}
-          CHECKIN_ACTION_PATH: ${{ vars.CHECKIN_ACTION_PATH }}
           CHECKIN_ACCOUNTS: ${{ secrets.CHECKIN_ACCOUNTS }}
           CHECKIN_CONNECT_TIMEOUT: "5"
           CHECKIN_READ_TIMEOUT: "15"

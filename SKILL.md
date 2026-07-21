@@ -37,7 +37,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 
 1. 读取 [references/implementation-contract.md](references/implementation-contract.md)。新建项目或处理 Python 项目时，从 `assets/templates/python-checkin/` 复制骨架，再用已验证事实替换显式占位符；用户已提供 Node.js 项目时保留其结构，只移植同一安全、状态和部署契约。不要把真实凭据写入任何文件。
 2. 分离配置、认证、HTTP 客户端、业务状态机、日志脱敏、通知和入口；GitHub Actions、青龙与本地运行必须共用同一业务入口。
-3. 从环境变量、GitHub Secrets 或青龙环境变量读取秘密。支持结构化多账号配置，并给出格式校验和不泄密的错误信息。
+3. 将已验证、固定且非敏感的站点事实（origin、路径、固定公开请求头、公开字段名）内置在项目的 `src/checkin/site_config.py`，并在 `site-analysis.md` 标明证据；不得要求操作者把这些值设为环境变量。仅从环境变量、GitHub Secrets 或青龙环境变量读取 Cookie、Token、密码等秘密，以及可变的运行参数。支持结构化多账号配置，并给出格式校验和不泄密的错误信息。
 4. 设置连接与读取超时。仅对确定安全的请求自动重试；签到 POST 未确认幂等时，先查询状态再决定是否重试。处理 401、403、409、429、5xx 和 `Retry-After`。
 5. 默认串行或低并发执行多账号；单个账号失败不得阻止其余账号，但整体失败必须产生非零退出码。
 6. 将异常、HTTP 调试信息和用户声明的敏感字段一并脱敏；禁止记录完整请求头。
