@@ -24,6 +24,7 @@ from urllib.parse import parse_qsl, unquote
 EXPECTED_NAME = "daily-checkin-builder"
 REQUIRED_REFERENCES = (
     "references/intake.md",
+    "references/cookie-acquisition.md",
     "references/site-analysis.md",
     "references/camofox-human-handoff.md",
     "references/implementation-contract.md",
@@ -900,6 +901,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "CamoFox human-handoff contract",
         not missing_handoff_terms,
         "missing: " + ", ".join(missing_handoff_terms) if missing_handoff_terms else "",
+    )
+
+    cookie_path = root / "references/cookie-acquisition.md"
+    cookie_terms = (
+        "Set-Cookie",
+        "开发者工具",
+        "Request Headers",
+        "CHECKIN_COOKIE",
+        "GitHub Actions Secret",
+        "青龙环境变量",
+        "浏览器配置文件",
+        "不得通过代理轮换",
+    )
+    missing_cookie_terms: list[str] = []
+    try:
+        cookie_text = read_text(cookie_path) if cookie_path.is_file() else ""
+        missing_cookie_terms.extend(term for term in cookie_terms if term not in cookie_text)
+        if "references/cookie-acquisition.md" not in skill_text:
+            missing_cookie_terms.append("SKILL.md:references/cookie-acquisition.md")
+    except (OSError, UnicodeError) as exc:
+        missing_cookie_terms.append(f"cannot read cookie acquisition reference: {exc}")
+    reporter.check(
+        "Cookie acquisition contract",
+        not missing_cookie_terms,
+        "missing: " + ", ".join(missing_cookie_terms) if missing_cookie_terms else "",
     )
 
     agent_file = root / REQUIRED_AGENT_FILE

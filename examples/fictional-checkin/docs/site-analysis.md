@@ -6,7 +6,7 @@ Keep this file free of real cookies, tokens, account identifiers, and personal d
 
 - Site and entry page: `https://rewards.example.invalid/` (reserved fictional origin)
 - Check-in page: `https://rewards.example.invalid/member/daily`
-- Authorization confirmation: required before enabling any live request
+- Authorization scope: an operator's direct request declares the account and normal check-in scope; clarify only conflicts or expansions before a live request
 - Evidence source: `docs/sanitized-evidence.md`, a fabricated and fully sanitized cURL/response transcript
 - Deployment targets: local Python, GitHub Actions, and QingLong
 
@@ -29,6 +29,7 @@ Runtime configuration deliberately has no default endpoint paths; it must use th
 - Required headers: `Accept`, explicit `User-Agent`, one configured authentication header, `Content-Type` and `X-CSRF-Token` for POST
 - User-Agent decision: the transcript's browser label is evidence of the captured client only, not a server requirement; the implementation uses the honest `daily-checkin-builder/1.0 (+authorized-automation)` identifier
 - Cookie/token use: authentication only; never persist or log it
+- Cookie acquisition: no Cookie authentication is observed in this fictional evidence; a real project must first use normal `Set-Cookie` updates or documented refresh evidence, and use a protected manually supplied Cookie only when that is supported by fresh evidence
 - CSRF acquisition: status response `data.csrf_token`
 - Token refresh: intentionally not inferred; refresh credentials through the site's documented normal login flow
 - Redirect behavior: not assumed; unexpected redirects are treated as site changes

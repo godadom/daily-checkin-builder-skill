@@ -6,7 +6,7 @@ This complete example shows the project generated from the deliberately fictiona
 
 For each account, the service queries today's state, obtains a CSRF token, sends one check-in request, and validates the business payload. `SUCCESS` and `ALREADY_DONE` are successful. `AUTH_EXPIRED` asks the operator to refresh credentials. `ACCESS_DENIED` means the authenticated account lacks permission. `TEMPORARY_ERROR` covers bounded transport failures. `SITE_CHANGED` indicates that the documented response contract no longer matches. `CONFIG_ERROR` is an environment problem. `UNSUPPORTED_SECURITY_CHALLENGE` stops rather than evading a security control. `INTERNAL_ERROR` records an unclassified, redacted implementation failure.
 
-The fictional evidence maps `GET /v1/daily/status` to the preflight/status query and `POST /v1/daily/claim` to the action. `.env.example` records those verified example paths; source-code defaults remain generic and are always overridden in deployment.
+The fictional evidence maps `GET /v1/daily/status` to the preflight/status query and `POST /v1/daily/claim` to the action. These verified, non-secret facts are source-controlled in `src/checkin/site_config.py`; runtime configuration cannot override them.
 
 ## Configuration
 
@@ -46,7 +46,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: cookie responses update only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: a normal `Set-Cookie` response updates only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. If the verified flow needs an initial Cookie, obtain the minimum first-party request Cookie from the operator's normal browser session and put it directly in the protected secret store; never copy a browser profile or Cookie database. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
 
 ## Deployment
 

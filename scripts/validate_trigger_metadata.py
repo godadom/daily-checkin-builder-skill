@@ -63,7 +63,7 @@ def route_prompt(prompt: str) -> str:
     if any(term in lowered for term in prohibited):
         return "REFUSE"
 
-    checkin_terms = ("check-in", "checkin", "daily claim", "每日签到", "签到接口", "签到脚本")
+    checkin_terms = ("check-in", "checkin", "daily claim", "每日签到", "签到", "签到接口", "签到脚本")
     supported_work = (
         "sanitized", "cURL", "har", "cookie", "csrf", "token", "script",
         "automation", "automate", "github actions", "qinglong", "repair",

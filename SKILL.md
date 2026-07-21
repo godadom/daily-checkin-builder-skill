@@ -9,8 +9,8 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 
 ## 守住授权和安全边界
 
-1. 在分析真实账号或访问真实站点前，取得用户对账号所有权与自动签到许可的明确确认。
-2. 要求用户先把 Cookie、Authorization、Token、密码、手机号、邮箱、设备标识和个人数据替换为明显占位符。若材料意外包含秘密，不要复述、写盘或提交；提醒用户立即轮换。
+1. 将用户直接提出的“分析、生成或修复其签到自动化”请求，视为其对账号归属、正常自动化许可和所述取证范围的声明；直接开始分析，不要求复述固定确认话术。只有账号归属或范围互相矛盾、不明，材料疑似来自他人，或请求触及禁止边界时才暂停澄清。
+2. 要求用户先把用于分析的 Cookie、Authorization、Token、密码、手机号、邮箱、设备标识和个人数据替换为明显占位符。若运行时确实需要 Cookie，按 [references/cookie-acquisition.md](references/cookie-acquisition.md) 先尝试正常、已证实的程序化会话获取；无法获取时提供详细的人工导出与安全保存说明。若材料意外包含秘密，不要复述、写盘或提交；提醒用户立即轮换。
 3. 只复现用户正常访问时浏览器可见的请求、CSRF 获取方式和客户端公开执行的签名逻辑。
 4. 遇到 Turnstile、reCAPTCHA、hCaptcha、WAF、设备证明、WebAuthn、短信验证或其他安全挑战时，立即停止自动提交与重试，并按 [references/camofox-human-handoff.md](references/camofox-human-handoff.md) 检查可选的 `$camofox-browser` 能力。可用时读取其当前说明并尝试一次正常导航；挑战仍存在时按当前 noVNC 流程请求用户本人手动完成。能力不可用、人工接管失败或无人值守执行仍会遇到挑战时，标记为 `UNSUPPORTED_SECURITY_CHALLENGE`。不得自动求解、代打码、规避检测或扩大权限。
 5. 拒绝未授权访问、凭据窃取、暴力破解、隐蔽爬取、攻击、批量注册、刷奖励和活动规则滥用。不要提供规避、隐匿或提取他人会话的方法。
@@ -19,9 +19,9 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 
 ## 阶段 1：收集并检查输入
 
-1. 按 [references/intake.md](references/intake.md) 收集站点入口、签到页、授权确认、目标平台、运行时、IANA 时区、执行时间、抖动、多账号、认证方式、脱敏材料和通知需求。
+1. 按 [references/intake.md](references/intake.md) 收集站点入口、签到页、用户请求声明的范围、目标平台、运行时、IANA 时区、执行时间、抖动、多账号、认证方式、脱敏材料和通知需求；不要求用户重复授权声明。
 2. 列出缺失信息。对不影响分析的选项使用文档规定的安全默认值；不要编造 URL、字段、认证方式或响应语义。
-3. 区分“可离线分析脱敏材料”和“需要访问真实站点”。没有明确授权时，不发送真实请求、不运行 live test。
+3. 区分“可离线分析脱敏材料”和“需要访问真实站点”。用户对该站点签到自动化的直接请求覆盖其所述的正常取证范围；不得扩展到其他账号、站点或操作。范围不明或存在冲突时，不发送真实请求、不运行 live test。
 4. 根据任务只读取所需参考文件；若要生成完整项目，读取所有与选定部署目标相关的参考文件。
 
 ## 阶段 2：重建正常签到流程
@@ -81,6 +81,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 ## 参考文件导航
 
 - 输入问卷与脱敏：[references/intake.md](references/intake.md)
+- Cookie 获取与会话续用：[references/cookie-acquisition.md](references/cookie-acquisition.md)
 - 站点流程取证：[references/site-analysis.md](references/site-analysis.md)
 - CamoFox 与 noVNC 人工接管：[references/camofox-human-handoff.md](references/camofox-human-handoff.md)
 - 项目与状态契约：[references/implementation-contract.md](references/implementation-contract.md)

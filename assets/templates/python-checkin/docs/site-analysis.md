@@ -6,7 +6,7 @@ Keep this file free of real cookies, tokens, account identifiers, and personal d
 
 - Site and entry page: `https://checkin.example.invalid/` (reserved fictional origin)
 - Check-in page: `https://checkin.example.invalid/account/checkin`
-- Authorization confirmation: required before enabling any live request
+- Authorization scope: the operator's direct request declares the account and normal check-in scope; clarify only conflicts or expansions before a live request
 - Evidence source: sanitized API documentation, HAR, cURL, Network capture, or existing code supplied by the authorized user
 - Deployment targets: local Python, GitHub Actions, and QingLong
 
@@ -28,6 +28,7 @@ The values below are reserved-domain scaffolding. A generated project must repla
 - JSON: `{"csrf_token":"sanitized-placeholder"}`
 - Required headers: `Accept`, explicit `User-Agent`, one configured authentication header, `Content-Type` and `X-CSRF-Token` for POST
 - Cookie/token use: authentication only; never persist or log it
+- Cookie acquisition: first accept normal `Set-Cookie` updates in the per-account in-memory jar; otherwise require evidence for a documented refresh flow or an operator-provided, minimum first-party request Cookie stored as a protected secret
 - CSRF acquisition: status response `data.csrf_token`
 - Token refresh: intentionally not inferred; refresh credentials through the site's documented normal login flow
 - Redirect behavior: not assumed; unexpected redirects are treated as site changes
