@@ -60,14 +60,13 @@ def _number(
 
 
 def _validated_credential(value: object, field_name: str) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or value == "":
         raise ConfigError(f"account requires non-empty {field_name}")
-    if any(not 32 <= ord(character) <= 126 for character in value):
-        raise ConfigError(f"account {field_name} must contain only printable ASCII without control characters")
-    credential = value.strip()
-    if len(credential) > 16_384:
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise ConfigError(f"account {field_name} must not contain control characters")
+    if len(value) > 16_384:
         raise ConfigError(f"account {field_name} is too long")
-    return credential
+    return value
 
 
 def _secret_for(item: Mapping[str, object], auth_type: str) -> str:

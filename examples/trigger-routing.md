@@ -2,7 +2,7 @@
 
 These cases exercise the `SKILL.md` metadata boundary without contacting a site. Run them with:
 
-    python scripts/validate_trigger_routing.py .
+    python scripts/validate_trigger_metadata.py .
 
 | Case | Sanitized request summary | Expected routing |
 | --- | --- | --- |
@@ -19,4 +19,4 @@ These cases exercise the `SKILL.md` metadata boundary without contacting a site.
 | N6 | “Create a price monitor that scrapes public product pages every day.” | Do not invoke |
 | N7 | “Summarize the public rules page that describes a site's daily check-in rewards.” | Do not invoke |
 
-The positive cases cover authorized or authorization-gated check-in analysis, implementation, repair, deployment, and bounded human challenge handoff. Refusal cases cover challenge bypass and credential abuse. Non-trigger cases cover ordinary webpage analysis, UI, generic CI/API work, scraping, and content that merely mentions check-in.
+This is a deterministic metadata heuristic, not an end-to-end Codex routing test. The positive cases cover authorized or authorization-gated check-in analysis, implementation, repair, deployment, and bounded human challenge handoff. Refusal cases cover challenge bypass and credential abuse. Non-trigger cases cover ordinary webpage analysis, UI, generic CI/API work, scraping, and content that merely mentions check-in.

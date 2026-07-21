@@ -125,6 +125,8 @@ class ConfigTests(unittest.TestCase):
         unsafe_secret = "placeholder" + chr(13) + chr(10) + "Injected"
         with self.assertRaisesRegex(ConfigError, "control characters"):
             load_settings({**env, "CHECKIN_TOKEN": unsafe_secret})
+        preserved = "  凭据值  "
+        self.assertEqual(load_settings({**env, "CHECKIN_TOKEN": preserved}).accounts[0].secret, preserved)
         with self.assertRaisesRegex(ConfigError, "installed IANA timezone"):
             load_settings({**env, "CHECKIN_TIMEZONE": "../Asia/Shanghai"})
 

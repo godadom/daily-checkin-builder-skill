@@ -19,6 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "assets" / "templates" / "python-checkin"
+EXAMPLE = ROOT / "examples" / "fictional-checkin"
 VALIDATOR = ROOT / "scripts" / "validate_generated_project.py"
 
 
@@ -32,9 +33,9 @@ def child_environment() -> dict[str, str]:
     return env
 
 
-def run_validator(project: Path) -> subprocess.CompletedProcess[str]:
+def run_validator(project: Path, mode: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(VALIDATOR), str(project)],
+        [sys.executable, str(VALIDATOR), str(project), "--mode", mode],
         check=False,
         capture_output=True,
         text=True,
@@ -74,6 +75,12 @@ def break_python_syntax(project: Path) -> None:
         handle.write("\ndef invalid_syntax(:\n")
 
 
+def break_yaml_syntax(project: Path) -> None:
+    workflow = project / ".github" / "workflows" / "daily-checkin.yml"
+    with workflow.open("a", encoding="utf-8", newline="") as handle:
+        handle.write("\ninvalid: [unclosed\n")
+
+
 def erase_qinglong_substance(project: Path) -> None:
     deployment = project / "DEPLOY_QINGLONG.md"
     deployment.write_text(
@@ -90,8 +97,20 @@ def remove_auth_expired_test(project: Path) -> None:
     test_file.write_text(text.replace("AUTH_EXPIRED", "AUTH_REMOVED"), encoding="utf-8")
 
 
+def add_safe_workflow_variation(project: Path) -> None:
+    workflow = project / ".github" / "workflows" / "daily-checkin.yml"
+    replace_once(workflow, 'python-version: "3.12"', 'python-version: "3.13"')
+    replace_once(
+        workflow,
+        "      - name: Run offline tests\n",
+        "      - name: Compile Python sources\n"
+        "        run: python -m compileall -q src\n"
+        "      - name: Run offline tests\n",
+    )
+
+
 def main() -> int:
-    if not TEMPLATE.is_dir() or not VALIDATOR.is_file():
+    if not TEMPLATE.is_dir() or not EXAMPLE.is_dir() or not VALIDATOR.is_file():
         print("[FAIL] validator fixtures are missing", file=sys.stderr)
         return 1
 
@@ -104,6 +123,7 @@ def main() -> int:
         ),
         ("guessed runtime endpoint", add_guessed_endpoint, "runtime supplies an invented default endpoint path"),
         ("invalid Python syntax", break_python_syntax, "invalid Python"),
+        ("invalid YAML syntax", break_yaml_syntax, "invalid YAML"),
         ("hollow QingLong guide", erase_qinglong_substance, "QingLong deployment lacks"),
         ("missing auth-expired test", remove_auth_expired_test, "tests lack state assertion for AUTH_EXPIRED"),
     )
@@ -113,7 +133,7 @@ def main() -> int:
         temp_root = Path(temp)
         baseline = temp_root / "baseline"
         shutil.copytree(TEMPLATE, baseline)
-        baseline_result = run_validator(baseline)
+        baseline_result = run_validator(baseline, "template")
         if baseline_result.returncode != 0:
             print("[FAIL] baseline template was rejected", file=sys.stderr)
             print(baseline_result.stdout, file=sys.stderr)
@@ -121,11 +141,35 @@ def main() -> int:
             return 1
         print("[PASS] baseline template accepted")
 
+        varied = temp_root / "safe-workflow-variation"
+        shutil.copytree(TEMPLATE, varied)
+        add_safe_workflow_variation(varied)
+        varied_result = run_validator(varied, "template")
+        if varied_result.returncode != 0:
+            print("[FAIL] safe workflow variation was rejected", file=sys.stderr)
+            print(varied_result.stdout, file=sys.stderr)
+            return 1
+        print("[PASS] safe workflow variation accepted")
+
+        generated_baseline = run_validator(baseline, "generated")
+        if generated_baseline.returncode == 0 or "site contract analysis_status" not in generated_baseline.stdout:
+            print("[FAIL] generated mode accepted the scaffold template", file=sys.stderr)
+            print(generated_baseline.stdout, file=sys.stderr)
+            return 1
+        print("[PASS] generated mode rejected the scaffold template")
+
+        generated_example = run_validator(EXAMPLE, "generated")
+        if generated_example.returncode != 0:
+            print("[FAIL] site-specific fictional example was rejected", file=sys.stderr)
+            print(generated_example.stdout, file=sys.stderr)
+            return 1
+        print("[PASS] site-specific fictional example accepted")
+
         for index, (name, mutate, expected) in enumerate(cases, start=1):
             project = temp_root / f"mutation-{index}"
             shutil.copytree(TEMPLATE, project)
             mutate(project)
-            result = run_validator(project)
+            result = run_validator(project, "template")
             output = result.stdout + "\n" + result.stderr
             passed = result.returncode != 0 and expected in output
             if passed:

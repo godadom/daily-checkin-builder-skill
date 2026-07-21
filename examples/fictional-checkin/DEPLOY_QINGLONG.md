@@ -55,6 +55,7 @@ To stop automation, disable the task and its related environment values in the p
 | `TEMPORARY_ERROR` / `4` | Check panel connectivity and site status; keep retries bounded and wait before a manual rerun. |
 | `SITE_CHANGED` / `5` | Disable the task, collect a newly sanitized response sample, update the documented contract and offline tests, then redeploy. |
 | `UNSUPPORTED_SECURITY_CHALLENGE` / `6` | Disable automation for that flow and handle the challenge manually; do not bypass it. |
+| `ACCESS_DENIED` / `7` | Disable the task and verify account entitlement or policy; do not retry or bypass access controls. |
 | `INTERNAL_ERROR` / `70` | Review only redacted logs, reproduce with offline tests, and fix the implementation without exposing secrets. |
 
-Mixed failures use this priority: security challenge, configuration, site change, authentication, temporary failure, then internal error. All accounts still receive a result before the process exits.
+Mixed failures use this priority: access denied, security challenge, configuration, site change, authentication, temporary failure, then internal error. All accounts still receive a result before the process exits.

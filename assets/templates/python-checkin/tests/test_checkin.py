@@ -4,6 +4,7 @@ import unittest
 from dataclasses import replace
 
 from helpers import account, fixture, response, service, settings
+from checkin.auth import AccountAuthProvider
 from checkin.client import HttpResponse
 from checkin.models import CheckinResult, CheckinStatus, RunSummary
 from checkin.main import execute_accounts, main, run
@@ -63,7 +64,7 @@ class CheckinStateTests(unittest.TestCase):
     def test_403_is_classified_from_evidence_instead_of_assumed_auth(self):
         cases = (
             ({"code": "auth_expired"}, CheckinStatus.AUTH_EXPIRED),
-            ({"code": "permission_denied"}, CheckinStatus.UNSUPPORTED_SECURITY_CHALLENGE),
+            ({"code": "permission_denied"}, CheckinStatus.ACCESS_DENIED),
             ({"code": "unknown"}, CheckinStatus.SITE_CHANGED),
         )
         for payload, expected in cases:
@@ -101,6 +102,32 @@ class CheckinStateTests(unittest.TestCase):
         worker, _ = service(response({"code": "captcha_required"}, 403))
         self.assertEqual(worker.check_in(account()).status, CheckinStatus.UNSUPPORTED_SECURITY_CHALLENGE)
 
+    def test_documented_refresh_replays_only_the_safe_status_query(self):
+        item = account(secret="fixture-old")
+        provider = AccountAuthProvider(item, lambda _: "fixture-refreshed")
+        worker, transport = service(
+            response({"code": "auth_expired"}, 401),
+            fixture("status-checked.json"),
+            accounts=[item],
+            auth_provider_factory=lambda _: provider,
+        )
+        self.assertEqual(worker.check_in(item).status, CheckinStatus.ALREADY_DONE)
+        self.assertEqual([call["method"] for call in transport.calls], ["GET", "GET"])
+        self.assertEqual(transport.calls[1]["headers"]["Authorization"], "Bearer fixture-refreshed")
+
+    def test_refresh_after_rejected_post_confirms_without_repeating_post(self):
+        item = account(secret="fixture-old")
+        provider = AccountAuthProvider(item, lambda _: "fixture-refreshed")
+        worker, transport = service(
+            fixture("status-unchecked.json"),
+            response({"code": "auth_expired"}, 401),
+            fixture("status-checked.json"),
+            accounts=[item],
+            auth_provider_factory=lambda _: provider,
+        )
+        self.assertEqual(worker.check_in(item).status, CheckinStatus.SUCCESS)
+        self.assertEqual([call["method"] for call in transport.calls], ["GET", "POST", "GET"])
+
     def test_partial_account_success_does_not_stop_later_accounts(self):
         accounts = [account("one"), account("two"), account("three")]
         def runner(item):
@@ -137,16 +164,17 @@ class CheckinStateTests(unittest.TestCase):
             CheckinStatus.TEMPORARY_ERROR: 4,
             CheckinStatus.SITE_CHANGED: 5,
             CheckinStatus.UNSUPPORTED_SECURITY_CHALLENGE: 6,
+            CheckinStatus.ACCESS_DENIED: 7,
             CheckinStatus.INTERNAL_ERROR: 70,
         }
         for status, code in expected.items():
             with self.subTest(status=status):
                 self.assertEqual(RunSummary.from_results([CheckinResult("one", status, "fixture")]).exit_code, code)
         mixed = [CheckinResult(str(index), status, "fixture") for index, status in enumerate(expected)]
-        self.assertEqual(RunSummary.from_results(mixed).exit_code, 6)
+        self.assertEqual(RunSummary.from_results(mixed).exit_code, 7)
         self.assertEqual(RunSummary.from_results(mixed).status_counts["AUTH_EXPIRED"], 1)
-        without_challenge = [result for result in mixed if result.status is not CheckinStatus.UNSUPPORTED_SECURITY_CHALLENGE]
-        self.assertEqual(RunSummary.from_results(without_challenge).exit_code, 2)
+        without_access = [result for result in mixed if result.status is not CheckinStatus.ACCESS_DENIED]
+        self.assertEqual(RunSummary.from_results(without_access).exit_code, 6)
         temporary = CheckinResult("one", CheckinStatus.TEMPORARY_ERROR, "fixture", attempts=3)
         self.assertTrue(temporary.retry_recommended)
         self.assertTrue(temporary.retried)

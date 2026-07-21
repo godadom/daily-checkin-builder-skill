@@ -114,6 +114,7 @@
 - `TEMPORARY_ERROR`：检查网络、限流、`Retry-After` 和服务状态；
 - `SITE_CHANGED`：重新收集脱敏 Network 或响应样例；
 - `UNSUPPORTED_SECURITY_CHALLENGE`：停止自动化，不尝试绕过。
+- `ACCESS_DENIED`：停止任务并核对账号权限或站点政策，不重试、不绕过。
 
 ## 交付前验证
 

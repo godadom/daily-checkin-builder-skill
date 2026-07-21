@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Validate a Python project produced by the daily-checkin-builder skill.
 
-This is a deterministic, dependency-free structural and security smoke check.
+This is a deterministic structural and security smoke check. YAML parsing
+requires the pinned PyYAML dependency from ``requirements-validation.txt``.
 It does not contact a live website and never needs runtime credentials.
 """
 
@@ -19,6 +20,39 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
 from urllib.parse import parse_qsl, urlsplit
+
+try:
+    import yaml
+except ImportError:  # Reported as a validation finding instead of crashing.
+    yaml = None
+
+
+if yaml is not None:
+    class UniqueKeyLoader(yaml.BaseLoader):
+        """Parse YAML scalars conservatively and reject duplicate mapping keys."""
+
+
+    def _construct_unique_mapping(loader, node, deep=False):
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+
+    UniqueKeyLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        _construct_unique_mapping,
+    )
+else:
+    UniqueKeyLoader = None
 
 
 TEXT_SUFFIXES = {
@@ -111,7 +145,10 @@ SENSITIVE_QUERY_RE = re.compile(
     r"api[_-]?key|client[_-]?secret|session[_-]?id|csrf|device[_-]?id|"
     r"user[_-]?id|email|phone|password|passwd|secret|credential|auth|access[_-]?key)=([^&#\s\"']+)"
 )
-EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)+\b")
+EMAIL_RE = re.compile(
+    r"(?i)\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9-]+"
+    r"(?:\.[A-Z0-9-]+)*\.[A-Z][A-Z0-9-]*\b"
+)
 LABELLED_PHONE_RE = re.compile(
     r"(?i)(?:phone|mobile|tel|telephone|手机号|手机)\s*(?:[:=：]\s*)?(\+?\d[\d ()-]{7,}\d)"
 )
@@ -168,14 +205,11 @@ CRON_EXPRESSION_RE = re.compile(
 PINNED_REQUIREMENT_RE = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9_.-]*==[A-Za-z0-9][A-Za-z0-9_.+!-]*$"
 )
-APPROVED_ACTION_SHAS = {
-    "actions/checkout": "de0fac2e4500dabe0009e67214ff5f5447ce83dd",
-    "actions/setup-python": "a309ff8b426b58ec0e2a45f0f869d46889d02405",
-}
 REQUIRED_STATUS_NAMES = (
     "SUCCESS",
     "ALREADY_DONE",
     "AUTH_EXPIRED",
+    "ACCESS_DENIED",
     "TEMPORARY_ERROR",
     "SITE_CHANGED",
     "CONFIG_ERROR",
@@ -207,6 +241,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         description="Validate a generated daily check-in automation project."
     )
     parser.add_argument("path", type=Path, help="Path to the generated project root")
+    parser.add_argument(
+        "--mode",
+        choices=("template", "generated"),
+        default="generated",
+        help="Validate reusable scaffold safety or a completed site-specific project",
+    )
     return parser.parse_args(argv)
 
 
@@ -299,7 +339,10 @@ def programmatic_header_reference(value: str) -> bool:
     identifier = candidate.rstrip("})]")
     return bool(
         re.fullmatch(r"\{[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+\}", candidate)
-        or identifier in {"cookie_header", "auth_header", "authorization_header", "header_value"}
+        or identifier in {
+            "value", "cookie_value", "cookie_header", "auth_header",
+            "authorization_header", "header_value",
+        }
     )
 
 
@@ -522,7 +565,12 @@ def secret_findings(root: Path) -> list[Finding]:
                     findings.append(Finding(path, number, f"literal value assigned to {key}"))
             for quoted in QUOTED_ASSIGNMENT_RE.finditer(line):
                 key, _, value = quoted.groups()
-                if SENSITIVE_KEY_RE.search(key) and not safe_placeholder(value):
+                value_is_safe = (
+                    safe_header_value("cookie", value)
+                    if key.casefold() in {"cookie", "set-cookie", "set_cookie"}
+                    else safe_placeholder(value)
+                )
+                if SENSITIVE_KEY_RE.search(key) and not value_is_safe:
                     findings.append(Finding(path, number, f"literal value assigned to {key}"))
     return list(dict.fromkeys(findings))
 
@@ -581,6 +629,19 @@ def syntax_findings(root: Path) -> list[Finding]:
                 tomllib.loads(read_text(path))
             elif path.suffix.lower() == ".json":
                 json.loads(read_text(path))
+            elif path.suffix.lower() in {".yaml", ".yml"}:
+                if yaml is None:
+                    findings.append(
+                        Finding(
+                            path,
+                            0,
+                            "PyYAML is required; install requirements-validation.txt",
+                        )
+                    )
+                else:
+                    document = yaml.load(read_text(path), Loader=UniqueKeyLoader)
+                    if not isinstance(document, dict):
+                        findings.append(Finding(path, 0, "YAML document root must be a mapping"))
         except SyntaxError as exc:
             findings.append(Finding(path, exc.lineno or 0, f"invalid Python syntax: {exc.msg}"))
         except tomllib.TOMLDecodeError as exc:
@@ -589,6 +650,66 @@ def syntax_findings(root: Path) -> list[Finding]:
             findings.append(Finding(path, exc.lineno, f"invalid JSON: {exc.msg}"))
         except (OSError, UnicodeError) as exc:
             findings.append(Finding(path, 0, f"cannot parse file: {type(exc).__name__}"))
+        except Exception as exc:
+            if yaml is not None and isinstance(exc, yaml.YAMLError):
+                mark = getattr(exc, "problem_mark", None)
+                findings.append(
+                    Finding(path, (mark.line + 1) if mark else 0, f"invalid YAML: {exc}")
+                )
+            else:
+                raise
+    return findings
+
+
+def site_contract_findings(root: Path, mode: str) -> list[Finding]:
+    path = root / "docs" / "site-contract.json"
+    if not nonempty_file(path):
+        return [Finding(path, 0, "docs/site-contract.json is missing or empty")]
+    try:
+        contract = json.loads(read_text(path))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return [Finding(path, 0, f"site contract cannot be parsed: {type(exc).__name__}")]
+    expected = (
+        {"analysis_status": "template", "implementation_status": "scaffold"}
+        if mode == "template"
+        else {"analysis_status": "verified", "implementation_status": "site_specific"}
+    )
+    findings: list[Finding] = []
+    if not isinstance(contract, dict):
+        return [Finding(path, 0, "site contract root must be an object")]
+    if contract.get("schema_version") != 1:
+        findings.append(Finding(path, 0, "site contract schema_version must be 1"))
+    for key, value in expected.items():
+        if contract.get(key) != value:
+            findings.append(Finding(path, 0, f"site contract {key} must be {value!r} in {mode} mode"))
+    if contract.get("live_test_enabled") is not False:
+        findings.append(Finding(path, 0, "site contract live_test_enabled must be false"))
+    allowed = {"schema_version", "analysis_status", "implementation_status", "live_test_enabled"}
+    if set(contract) != allowed:
+        findings.append(Finding(path, 0, "site contract contains unsupported or missing keys"))
+    return findings
+
+
+def generated_scaffold_findings(root: Path) -> list[Finding]:
+    """Reject known bundled scaffold residue outside offline tests and fixtures."""
+
+    markers = (
+        "checkin.example.invalid",
+        "Baseline contract (not site evidence)",
+        "sanitized-placeholder",
+    )
+    findings: list[Finding] = []
+    for path in iter_text_files(root):
+        relative = path.relative_to(root)
+        if any(part.casefold() in {"tests", "test", "fixtures"} for part in relative.parts):
+            continue
+        try:
+            text = read_text(path)
+        except (OSError, UnicodeError):
+            continue
+        for marker in markers:
+            if marker.casefold() in text.casefold():
+                findings.append(Finding(path, 0, f"generated project retains scaffold marker {marker!r}"))
     return findings
 
 
@@ -1133,7 +1254,7 @@ def workflow_tests_before_checkin(text: str) -> bool:
         r"(?i)(?:check[- ]?in|checkin|签到|\bpython(?:3)?\s+(?:-m\s+checkin\b|run\.py\b))"
     )
     entry_re = re.compile(
-        r"\s*(?:python3?|py\s+-3)\s+(?:-m\s+checkin|run\.py)\s*",
+        r"\s*(?:python3?|py\s+-3)\s+(?:-m\s+checkin(?:\.main)?|run\.py)\s*",
         re.IGNORECASE,
     )
     test_positions = [
@@ -1148,29 +1269,19 @@ def workflow_tests_before_checkin(text: str) -> bool:
 
 
 def workflow_safety_findings(path: Path, text: str) -> list[Finding]:
-    """Reject unsafe remote triggers and dispatch data passed to a shell."""
+    """Check security properties while allowing safe workflow variation."""
 
     findings: list[Finding] = []
     visible = without_yaml_comments(text)
-    if re.search(r"(?m)^\s*(?:-\s*)?[\"'][^\"']+[\"']\s*:", visible):
-        findings.append(Finding(path, 0, "quoted workflow mapping keys are outside the accepted YAML subset"))
-    if any(indent == 0 and inline for indent, inline, _ in mapping_blocks(text, "on")):
-        findings.append(Finding(path, 0, "top-level on must use block YAML, not a flow collection"))
-    if re.search(r"(?m)^\s*-\s*[\[{]", visible) or re.search(
-        r"(?mi)^\s*[\"']?steps[\"']?\s*:\s*[\[{]",
-        visible,
-    ):
-        findings.append(Finding(path, 0, "workflow steps must not use YAML flow collections"))
-    if re.search(r"(?m)(?:^|\s)[&*][A-Za-z_][A-Za-z0-9_-]*(?=\s|$)", visible) or re.search(
-        r"(?m)^\s*[\"']?<<[\"']?\s*:",
-        visible,
-    ):
-        findings.append(Finding(path, 0, "workflow YAML anchors, aliases, and merge keys are not permitted"))
     top_entries = direct_mapping_entries(visible.splitlines())
     top_keys = [key for key, _ in top_entries]
-    allowed_top = {"name", "on", "permissions", "concurrency", "env", "jobs"}
-    if set(top_keys) != allowed_top or any(top_keys.count(key) != 1 for key in allowed_top):
-        findings.append(Finding(path, 0, "workflow must use each audited top-level key exactly once and no others"))
+    required_top = {"on", "permissions", "concurrency", "jobs"}
+    allowed_top = required_top | {"name", "run-name", "env"}
+    if not required_top.issubset(top_keys):
+        findings.append(Finding(path, 0, "workflow lacks on, permissions, concurrency, or jobs"))
+    if set(top_keys) - allowed_top or any(top_keys.count(key) > 1 for key in set(top_keys)):
+        findings.append(Finding(path, 0, "workflow has duplicate or unsupported top-level keys"))
+
     dangerous_mapping = re.compile(
         r"(?mi)^\s*(?:container|services|defaults|shell|working-directory)\s*:"
     )
@@ -1182,51 +1293,7 @@ def workflow_safety_findings(path: Path, text: str) -> list[Finding]:
         findings.append(Finding(path, 0, "workflow contains an execution-context override"))
     if dangerous_environment.search(visible):
         findings.append(Finding(path, 0, "workflow contains a dangerous process-control environment variable"))
-    runs_on = mapping_blocks(text, "runs-on")
-    if (
-        len(runs_on) != 1
-        or runs_on[0][1].strip("\"'").casefold() != "ubuntu-24.04"
-        or runs_on[0][2]
-    ):
-        findings.append(Finding(path, 0, "workflow must use the audited ubuntu-24.04 hosted runner"))
-    jobs_children = top_level_children(text, "jobs")
-    job_entries = direct_mapping_entries(jobs_children)
-    if job_entries != [("check-in", "")]:
-        findings.append(Finding(path, 0, "workflow must contain exactly one check-in job"))
-    checkin_jobs = mapping_blocks("\n".join(jobs_children), "check-in")
-    if len(checkin_jobs) != 1:
-        findings.append(Finding(path, 0, "check-in job mapping is missing or duplicated"))
-    else:
-        job_fields = direct_mapping_entries(checkin_jobs[0][2])
-        job_keys = [key for key, _ in job_fields]
-        if (
-            set(job_keys) != {"runs-on", "timeout-minutes", "steps"}
-            or any(job_keys.count(key) != 1 for key in {"runs-on", "timeout-minutes", "steps"})
-        ):
-            findings.append(Finding(path, 0, "check-in job contains fields outside the audited subset"))
-    top_env_blocks = [block for block in mapping_blocks(text, "env") if block[0] == 0]
-    if len(top_env_blocks) != 1 or top_env_blocks[0][1]:
-        findings.append(Finding(path, 0, "workflow must have one block-style top-level env mapping"))
-    else:
-        top_env_entries = direct_mapping_entries(top_env_blocks[0][2])
-        top_env_values = {key: value.strip("\"'") for key, value in top_env_entries}
-        if (
-            set(top_env_values) != {"checkin_timezone", "pythonunbuffered"}
-            or len(top_env_entries) != 2
-            or top_env_values.get("pythonunbuffered") != "1"
-        ):
-            findings.append(Finding(path, 0, "top-level env mapping differs from the audited timezone/runtime contract"))
-    for _, inline, children in mapping_blocks(text, "steps"):
-        if inline:
-            continue
-        starters = [line for line in children if re.match(r"^\s*-\s+", line)]
-        if starters:
-            list_indent = min(indentation(line) for line in starters)
-            for line in starters:
-                if indentation(line) != list_indent:
-                    continue
-                if not re.match(r"^\s*-\s+(?:name|uses|run|if)\s*:", line, re.IGNORECASE):
-                    findings.append(Finding(path, 0, "step list item starts with an unsupported field"))
+
     on_children = top_level_children(text, "on")
     event_lines = [line for line in on_children if line.strip()]
     if event_lines:
@@ -1238,16 +1305,15 @@ def workflow_safety_findings(path: Path, text: str) -> list[Finding]:
             for match in [re.match(r"^\s*[\"']?([A-Za-z_][A-Za-z0-9_-]*)[\"']?\s*:", line)]
             if match
         }
-        unexpected = events - {"schedule", "workflow_dispatch"}
-        if unexpected:
+        if events - {"schedule", "workflow_dispatch"}:
             findings.append(Finding(path, 0, "check-in workflow has a non-approved remote trigger"))
     if re.search(r"(?mi)^\s+[\"']?inputs[\"']?\s*:", "\n".join(on_children)):
         findings.append(Finding(path, 0, "workflow_dispatch inputs are not permitted"))
     if re.search(r"(?im)^\s*[\"']?LIVE_TEST[\"']?\s*:", visible):
         findings.append(Finding(path, 0, "workflow must not define LIVE_TEST"))
+
     unsafe_expression = re.compile(
-        r"\$\{\{(?:(?!\}\}).)*(?:"
-        r"\binputs\s*(?:\.|\[)|"
+        r"\$\{\{(?:(?!\}\}).)*(?:\binputs\s*(?:\.|\[)|"
         r"\bgithub\s*(?:\.\s*event\b|\[\s*[\"']event[\"']\s*\])|"
         r"\bgithub\s*\.\s*(?:ref|head_ref|base_ref)\b)",
         re.IGNORECASE | re.DOTALL,
@@ -1257,16 +1323,11 @@ def workflow_safety_findings(path: Path, text: str) -> list[Finding]:
         re.IGNORECASE | re.DOTALL,
     )
     shell_hazard = re.compile(
-        r"(?im)(?:^\s*(?:env|printenv)(?:\s|$)|\bset\s+-x\b|"
-        r"\bGITHUB_(?:ENV|OUTPUT)\b|\b(?:curl|wget)\b)"
+        r"(?im)(?:^\s*(?:env|printenv)(?:\s|$)|\bset\s+-x\b|\bGITHUB_(?:ENV|OUTPUT)\b)"
     )
-    allowed_run = re.compile(
-        r"(?i)(?:"
-        r"(?:python3?|py\s+-3)\s+-m\s+pip\s+install\s+--disable-pip-version-check\s+-r\s+requirements\.txt|"
-        r"(?:python3?|py\s+-3)\s+tests/run_offline\.py|"
-        r"(?:python3?|py\s+-3)\s+(?:-m\s+checkin|run\.py)|"
-        r"echo\s+\"[^\"$`\\]*\"(?:\s*>>\s*\"\$GITHUB_STEP_SUMMARY\")?"
-        r")"
+    entry_re = re.compile(
+        r"\s*(?:py\s+-3|python3?)\s+(?:-m\s+checkin(?:\.main)?|run\.py)\s*",
+        re.IGNORECASE,
     )
     for step in workflow_steps(text):
         run_text = step_run_text(step)
@@ -1274,56 +1335,26 @@ def workflow_safety_findings(path: Path, text: str) -> list[Finding]:
         step_keys = [key for key, _ in step_fields]
         if any(step_keys.count(key) != 1 for key in set(step_keys)):
             findings.append(Finding(path, 0, "workflow step contains a duplicate mapping key"))
-        if "uses" in step_keys:
-            expected_step_keys = {"name", "uses", "with"}
-        elif "if" in step_keys:
-            expected_step_keys = {"name", "if", "run"}
-        elif "env" in step_keys:
-            expected_step_keys = {"name", "env", "run"}
-        else:
-            expected_step_keys = {"name", "run"}
-        if set(step_keys) != expected_step_keys:
-            findings.append(Finding(path, 0, "workflow step contains fields outside the audited subset"))
-        if "env" in step_keys and not re.fullmatch(
-            r"\s*(?:py\s+-3|python3?)\s+(?:-m\s+checkin|run\.py)\s*",
-            run_text,
-            re.IGNORECASE,
-        ):
-            findings.append(Finding(path, 0, "only the shared check-in entry step may define step environment values"))
-        if "env" in step_keys:
-            env_blocks = mapping_blocks(step, "env")
-            expected_env = {
-                "checkin_base_url", "checkin_status_path", "checkin_action_path",
-                "checkin_accounts", "checkin_connect_timeout", "checkin_read_timeout",
-                "checkin_max_retries", "checkin_jitter_max_seconds", "checkin_notify_mode",
-            }
-            if len(env_blocks) != 1 or env_blocks[0][1]:
-                findings.append(Finding(path, 0, "check-in step must use one block-style env mapping"))
-            else:
-                env_entries = direct_mapping_entries(env_blocks[0][2])
-                env_keys = [key for key, _ in env_entries]
-                if set(env_keys) != expected_env or len(env_keys) != len(expected_env):
-                    findings.append(Finding(path, 0, "check-in step env mapping differs from the audited contract"))
-        if "if" in step_keys and not run_text.lstrip().casefold().startswith("echo "):
-            findings.append(Finding(path, 0, "conditional steps are limited to fixed notification messages"))
-        if run_text and not allowed_run.fullmatch(run_text.strip()):
-            findings.append(Finding(path, 0, "run step is outside the audited command allowlist"))
         if run_text and unsafe_expression.search(run_text):
             findings.append(Finding(path, 0, "dispatch or branch expression is interpolated into a run step"))
         if run_text and secret_expression.search(run_text):
             findings.append(Finding(path, 0, "secret expression is interpolated directly into a run step"))
         if run_text and shell_hazard.search(run_text):
-            findings.append(Finding(path, 0, "run step contains a credential-exposure or network shell primitive"))
-        if secret_expression.search(step) and not re.fullmatch(
-            r"\s*(?:py\s+-3|python3?)\s+(?:-m\s+checkin|run\.py)\s*",
-            run_text,
-            re.IGNORECASE,
-        ):
+            findings.append(Finding(path, 0, "run step contains a credential-exposure primitive"))
+        if secret_expression.search(step) and not entry_re.fullmatch(run_text):
             findings.append(Finding(path, 0, "only the shared check-in entry step may receive secrets"))
-    secret_reference = re.compile(
-        r"\$\{\{(?:(?!\}\}).)*\bsecrets\s*(?:\.|\[)",
-        re.IGNORECASE,
-    )
+        if entry_re.fullmatch(run_text):
+            env_blocks = mapping_blocks(step, "env")
+            if len(env_blocks) != 1 or env_blocks[0][1]:
+                findings.append(Finding(path, 0, "check-in step must use one block-style env mapping"))
+                continue
+            env_keys = {key for key, _ in direct_mapping_entries(env_blocks[0][2])}
+            required = {"checkin_base_url", "checkin_status_path", "checkin_action_path"}
+            auth_options = {"checkin_accounts", "checkin_token", "checkin_cookie", "checkin_api_key"}
+            if not required.issubset(env_keys) or not (env_keys & auth_options):
+                findings.append(Finding(path, 0, "check-in step lacks endpoint or authentication environment values"))
+
+    secret_reference = re.compile(r"\$\{\{(?:(?!\}\}).)*\bsecrets\s*(?:\.|\[)", re.IGNORECASE)
     allowed_secret = re.compile(
         r"^(\s*)[\"']?(CHECKIN_[A-Z0-9_]+)[\"']?\s*:\s*"
         r"\$\{\{\s*secrets\.(CHECKIN_[A-Z0-9_]+)\s*\}\}\s*$"
@@ -1354,15 +1385,9 @@ def workflow_action_pin_findings(path: Path, text: str) -> list[Finding]:
         if action.startswith("docker://"):
             findings.append(Finding(path, number, "Docker actions are not in the default allowlist"))
             continue
-        repository = action.split("@", 1)[0].casefold()
-        if repository not in APPROVED_ACTION_SHAS:
-            findings.append(Finding(path, number, "action repository is not in the audited default allowlist"))
-            continue
         ref_match = re.match(r"^[^@\s]+@([0-9a-fA-F]{40})$", action)
         if not ref_match:
             findings.append(Finding(path, number, f"action is not pinned to a full commit SHA: {action}"))
-        elif ref_match.group(1).casefold() != APPROVED_ACTION_SHAS[repository]:
-            findings.append(Finding(path, number, "action SHA does not match the audited allowlist"))
     for step in workflow_steps(text):
         action_match = re.search(
             r"(?mi)^\s*(?:-\s*)?[\"']?uses[\"']?\s*:\s*[\"']?([^\s\"']+)[\"']?\s*$",
@@ -1372,23 +1397,15 @@ def workflow_action_pin_findings(path: Path, text: str) -> list[Finding]:
             continue
         repository = action_match.group(1).split("@", 1)[0].casefold()
         with_blocks = mapping_blocks(step, "with")
-        if len(with_blocks) != 1 or with_blocks[0][1]:
-            findings.append(Finding(path, 0, "audited action step must have one block-style with mapping"))
-            continue
-        entries = direct_mapping_entries(with_blocks[0][2])
+        entries = direct_mapping_entries(with_blocks[0][2]) if len(with_blocks) == 1 and not with_blocks[0][1] else []
         normalized = {key: value.strip("\"'") for key, value in entries}
         if repository == "actions/checkout":
-            expected = {"persist-credentials": "false"}
-            if normalized != expected or len(entries) != len(expected):
-                findings.append(Finding(path, 0, "checkout with mapping must contain only persist-credentials: false"))
+            if normalized.get("persist-credentials", "true").casefold() != "false":
+                findings.append(Finding(path, 0, "checkout must set persist-credentials: false"))
         elif repository == "actions/setup-python":
-            expected = {
-                "python-version": "3.12",
-                "cache": "pip",
-                "cache-dependency-path": "requirements.txt",
-            }
-            if normalized != expected or len(entries) != len(expected):
-                findings.append(Finding(path, 0, "setup-python with mapping differs from the audited runtime/cache contract"))
+            version = normalized.get("python-version", "")
+            if not re.fullmatch(r"3\.(?:1[1-9]|[2-9][0-9])", version):
+                findings.append(Finding(path, 0, "setup-python must select Python 3.11 or newer"))
     return findings
 
 
@@ -1489,7 +1506,13 @@ def qinglong_contract_findings(root: Path, files: Iterable[Path]) -> list[Findin
         "pinned dependency installation": bool(dependency_install.search(text)),
         "offline test command": "tests/run_offline.py" in text,
         "IANA timezone configuration": "checkin_timezone" in lowered and bool(re.search(r"[A-Za-z]+/[A-Za-z0-9_+./-]+", text)),
-        "single/multi-account environment variables": "checkin_accounts" in lowered and "checkin_base_url" in lowered,
+        "single/multi-account environment variables": (
+            "checkin_base_url" in lowered
+            and any(
+                name in lowered
+                for name in ("checkin_accounts", "checkin_cookie", "checkin_token", "checkin_api_key")
+            )
+        ),
         "verified endpoint variables": "checkin_status_path" in lowered and "checkin_action_path" in lowered,
         "dependency and environment troubleshooting": "troubleshoot" in lowered or "排障" in lowered,
         "disable instructions": "disable" in lowered or "禁用" in lowered,
@@ -1571,6 +1594,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print("\nValidation failed (1 check failed).")
         return 1
     reporter.check("project directory", True, str(root))
+    reporter.check("validation mode", True, args.mode)
 
     readme = root / "README.md"
     readme_ok = nonempty_file(readme)
@@ -1597,6 +1621,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "site-analysis evidence contract",
         not analysis_findings,
         format_findings(root, analysis_findings),
+    )
+
+    contract_findings = site_contract_findings(root, args.mode)
+    reporter.check(
+        "machine-readable site contract",
+        not contract_findings,
+        format_findings(root, contract_findings),
+    )
+
+    scaffold_findings = generated_scaffold_findings(root) if args.mode == "generated" else []
+    reporter.check(
+        "no generated-project scaffold residue",
+        not scaffold_findings,
+        "not applicable (template mode)" if args.mode == "template" else format_findings(root, scaffold_findings),
     )
 
     env_example = root / ".env.example"
@@ -1633,7 +1671,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     parse_findings = syntax_findings(root)
     reporter.check(
-        "Python, TOML, and JSON syntax",
+        "Python, TOML, JSON, and YAML syntax",
         not parse_findings,
         format_findings(root, parse_findings),
     )

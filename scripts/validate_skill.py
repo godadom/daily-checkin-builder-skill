@@ -34,11 +34,11 @@ REQUIRED_REFERENCES = (
 )
 REQUIRED_AGENT_FILE = "agents/openai.yaml"
 TEMPLATE_DIRECTORY = "assets/templates"
-GENERATED_PROJECT_DIRECTORIES = (
-    "assets/templates/python-checkin",
-    "examples/fictional-checkin",
+BUNDLED_PROJECTS = (
+    ("assets/templates/python-checkin", "template"),
+    ("examples/fictional-checkin", "generated"),
 )
-TRIGGER_VALIDATOR = "scripts/validate_trigger_routing.py"
+TRIGGER_VALIDATOR = "scripts/validate_trigger_metadata.py"
 VALIDATOR_SELF_TEST = "scripts/test_validators.py"
 
 MARKDOWN_LINK_RE = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
@@ -83,7 +83,10 @@ SENSITIVE_QUERY_RE = re.compile(
     r"api[_-]?key|client[_-]?secret|session[_-]?id|csrf|device[_-]?id|"
     r"user[_-]?id|email|phone|password|passwd|secret|credential|auth|access[_-]?key)=([^&#\s\"']+)"
 )
-EMAIL_RE = re.compile(r"(?i)\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)+\b")
+EMAIL_RE = re.compile(
+    r"(?i)\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9-]+"
+    r"(?:\.[A-Z0-9-]+)*\.[A-Z][A-Z0-9-]*\b"
+)
 LABELLED_PHONE_RE = re.compile(
     r"(?i)(?:phone|mobile|tel|telephone|手机号|手机)\s*(?:[:=：]\s*)?(\+?\d[\d ()-]{7,}\d)"
 )
@@ -408,7 +411,10 @@ def programmatic_header_reference(value: str) -> bool:
     identifier = candidate.rstrip("})]")
     return bool(
         re.fullmatch(r"\{[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+\}", candidate)
-        or identifier in {"cookie_header", "auth_header", "authorization_header", "header_value"}
+        or identifier in {
+            "value", "cookie_value", "cookie_header", "auth_header",
+            "authorization_header", "header_value",
+        }
     )
 
 
@@ -633,7 +639,12 @@ def secret_findings(root: Path) -> list[Finding]:
                     findings.append(Finding(path, number, f"literal value assigned to {key}"))
             for quoted in QUOTED_ASSIGNMENT_RE.finditer(line):
                 key, _, value = quoted.groups()
-                if SENSITIVE_KEY_RE.search(key) and not safe_placeholder(value):
+                value_is_safe = (
+                    safe_header_value("cookie", value)
+                    if key.casefold() in {"cookie", "set-cookie", "set_cookie"}
+                    else safe_placeholder(value)
+                )
+                if SENSITIVE_KEY_RE.search(key) and not value_is_safe:
                     findings.append(Finding(path, number, f"literal value assigned to {key}"))
     # A line may match both the signature and assignment checks. Keep output concise.
     return list(dict.fromkeys(findings))
@@ -651,7 +662,7 @@ def relative_findings(root: Path, findings: Iterable[Finding]) -> str:
     return "; ".join(rendered)
 
 
-def validate_bundled_project(root: Path, relative: str) -> tuple[bool, str]:
+def validate_bundled_project(root: Path, relative: str, mode: str) -> tuple[bool, str]:
     validator = Path(__file__).resolve().with_name("validate_generated_project.py")
     project = root / relative
     if not validator.is_file() or not project.is_dir():
@@ -664,7 +675,7 @@ def validate_bundled_project(root: Path, relative: str) -> tuple[bool, str]:
         }
         child_env["PYTHONIOENCODING"] = "utf-8"
         completed = subprocess.run(
-            [sys.executable, str(validator), str(project)],
+            [sys.executable, str(validator), str(project), "--mode", mode],
             check=False,
             capture_output=True,
             text=True,
@@ -683,7 +694,7 @@ def validate_bundled_project(root: Path, relative: str) -> tuple[bool, str]:
     return False, (output[-800:] or f"validator exited {completed.returncode}")
 
 
-def validate_trigger_routing(root: Path) -> tuple[bool, str]:
+def validate_trigger_metadata(root: Path) -> tuple[bool, str]:
     validator = root / TRIGGER_VALIDATOR
     if not validator.is_file():
         return False, f"missing validator: {TRIGGER_VALIDATOR}"
@@ -817,6 +828,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "when the user",
         "use for",
         "applies to",
+        "经授权",
         "for authorized",
         "authorized daily",
         "适用",
@@ -868,9 +880,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     handoff_path = root / "references/camofox-human-handoff.md"
     handoff_terms = (
         "$camofox-browser",
-        "toggle-display",
-        '{"headless":"virtual"}',
-        "vncUrl",
+        "当前说明",
+        "noVNC",
+        "临时敏感",
         "等待用户明确确认",
         "UNSUPPORTED_SECURITY_CHALLENGE",
         "不得启用代理轮换",
@@ -958,16 +970,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "not linked from SKILL.md: " + ", ".join(unlinked_refs) if unlinked_refs else "",
     )
 
-    routing_ok, routing_detail = validate_trigger_routing(root)
-    reporter.check("executable trigger routing", routing_ok, routing_detail)
+    routing_ok, routing_detail = validate_trigger_metadata(root)
+    reporter.check("trigger metadata heuristic", routing_ok, routing_detail)
 
     mutations_ok, mutations_detail = validate_validator_mutations(root)
     reporter.check("validator negative mutations", mutations_ok, mutations_detail)
 
-    for relative in GENERATED_PROJECT_DIRECTORIES:
-        bundled_ok, bundled_detail = validate_bundled_project(root, relative)
+    for relative, mode in BUNDLED_PROJECTS:
+        bundled_ok, bundled_detail = validate_bundled_project(root, relative, mode)
         reporter.check(
-            f"bundled project contract ({Path(relative).name})",
+            f"bundled project contract ({Path(relative).name}, {mode})",
             bundled_ok,
             bundled_detail,
         )

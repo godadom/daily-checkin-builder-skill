@@ -25,7 +25,7 @@ Runtime configuration deliberately has no default endpoint paths; it must use th
 - Status method/path: `GET /v1/daily/status`
 - Check-in method/path: `POST /v1/daily/claim`
 - Query/form/multipart: none in this baseline
-- JSON: `{"csrf_token":"sanitized-placeholder"}`
+- JSON: `{"csrf_token":"fixture-csrf-from-status"}`
 - Required headers: `Accept`, explicit `User-Agent`, one configured authentication header, `Content-Type` and `X-CSRF-Token` for POST
 - User-Agent decision: the transcript's browser label is evidence of the captured client only, not a server requirement; the implementation uses the honest `daily-checkin-builder/1.0 (+authorized-automation)` identifier
 - Cookie/token use: authentication only; never persist or log it
@@ -38,7 +38,7 @@ Runtime configuration deliberately has no default endpoint paths; it must use th
 - Success: HTTP 200, business `code: 0`, and `data.checked_in: true`
 - Already done: status query reports `checked_in: true` or action returns `already_checked`
 - Authentication expired: evidenced HTTP 401 with `auth_expired`, or HTTP 403 with `csrf_invalid`
-- Permission denied: evidenced HTTP 403 with `permission_denied`; stop as `UNSUPPORTED_SECURITY_CHALLENGE` rather than retrying or bypassing
+- Permission denied: evidenced HTTP 403 with `permission_denied`; stop as `ACCESS_DENIED` rather than retrying or bypassing
 - Unknown HTTP 403: `SITE_CHANGED` until new sanitized evidence explains it
 - Temporary failure: timeout, 429, or retry-exhausted 5xx
 - Site changed: malformed JSON, unexpected status, or missing fields

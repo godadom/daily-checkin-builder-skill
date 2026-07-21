@@ -1,6 +1,6 @@
 ---
 name: daily-checkin-builder
-description: "分析和实现经用户授权的网站每日签到自动化，生成或修复可维护、可测试的 Python 3 项目，并部署到 GitHub Actions、青龙面板或本地命令行；用户已经提供 Node.js 签到项目时，可在其现有结构和原生工具内修复，但不从零生成 Node.js 项目。用户提供签到页 URL、脱敏 HAR、Copy as cURL、请求头、前端代码、接口响应或已有脚本，并要求分析签到接口、处理 Cookie/Token/CSRF/Token 刷新、多账号、重试或通知时使用。不得用于未授权访问、凭据或会话窃取、暴力破解、绕过 CAPTCHA/WAF/设备证明/WebAuthn/短信验证/反机器人挑战/付费或访问控制、隐蔽爬取、攻击、批量注册、刷奖励或活动滥用；普通网页分析、网页总结、爬取、UI 开发、通用 API 分析和通用 CI 配置也不使用。"
+description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL、请求头、接口响应或已有脚本，并生成或修复支持 Cookie、Token、CSRF、多账号和安全重试的 Python 3 自动化，部署到 GitHub Actions、青龙或本地。用户已经提供 Node.js 签到项目时可原位修复，但不从零生成 Node.js。普通网页分析、网页总结、爬取、UI 开发、通用 API/CI，以及未授权访问、凭据窃取、安全挑战绕过、批量注册或刷奖励均不使用。"
 ---
 
 # 每日签到项目构建
@@ -12,7 +12,7 @@ description: "分析和实现经用户授权的网站每日签到自动化，生
 1. 在分析真实账号或访问真实站点前，取得用户对账号所有权与自动签到许可的明确确认。
 2. 要求用户先把 Cookie、Authorization、Token、密码、手机号、邮箱、设备标识和个人数据替换为明显占位符。若材料意外包含秘密，不要复述、写盘或提交；提醒用户立即轮换。
 3. 只复现用户正常访问时浏览器可见的请求、CSRF 获取方式和客户端公开执行的签名逻辑。
-4. 遇到 Turnstile、reCAPTCHA、hCaptcha、WAF、设备证明、WebAuthn、短信验证或其他安全挑战时，立即停止自动提交与重试，并按 [references/camofox-human-handoff.md](references/camofox-human-handoff.md) 尝试调用 `$camofox-browser`。若挑战仍存在，切换到 noVNC 可视会话并请求用户本人手动完成；不得自动求解、代打码、规避检测或绕过挑战。无法安全完成人工接管，或无人值守执行仍会遇到挑战时，标记为 `UNSUPPORTED_SECURITY_CHALLENGE`。付费墙和访问控制不可通过 CamoFox 或人工接管扩大权限。
+4. 遇到 Turnstile、reCAPTCHA、hCaptcha、WAF、设备证明、WebAuthn、短信验证或其他安全挑战时，立即停止自动提交与重试，并按 [references/camofox-human-handoff.md](references/camofox-human-handoff.md) 检查可选的 `$camofox-browser` 能力。可用时读取其当前说明并尝试一次正常导航；挑战仍存在时按当前 noVNC 流程请求用户本人手动完成。能力不可用、人工接管失败或无人值守执行仍会遇到挑战时，标记为 `UNSUPPORTED_SECURITY_CHALLENGE`。不得自动求解、代打码、规避检测或扩大权限。
 5. 拒绝未授权访问、凭据窃取、暴力破解、隐蔽爬取、攻击、批量注册、刷奖励和活动规则滥用。不要提供规避、隐匿或提取他人会话的方法。
 
 详细边界、秘密处理和日志规则见 [references/security.md](references/security.md)。
@@ -26,11 +26,11 @@ description: "分析和实现经用户授权的网站每日签到自动化，生
 
 ## 阶段 2：重建正常签到流程
 
-1. 在生成项目中先建立 `docs/site-analysis.md`，按 [references/site-analysis.md](references/site-analysis.md) 记录证据、请求序列、状态判据和未验证假设；绝不记录真实秘密。
+1. 在生成项目中先建立 `docs/site-analysis.md`，按 [references/site-analysis.md](references/site-analysis.md) 记录证据、请求序列、状态判据和未验证假设；同时把 `docs/site-contract.json` 从 `template/scaffold` 更新为 `verified/site_specific`。绝不记录真实秘密，证据不足时不得伪造 verified 状态。
 2. 按以下顺序选择实现：正式 API；浏览器实际调用的稳定 HTTP API；必要的公开客户端签名；最后才是在不绕过安全挑战前提下的浏览器自动化。
 3. 识别登录、签到前查询、签到请求、签到后验证、CSRF、Token 刷新、重定向和动态参数。没有证据的字段保持为明确假设或阻塞项。
 4. 不以 HTTP 200 单独判定成功；组合业务状态码、响应字段、签到状态查询或余额/积分变化。
-5. 至少映射 `SUCCESS`、`ALREADY_DONE`、`AUTH_EXPIRED`、`TEMPORARY_ERROR`、`SITE_CHANGED`、`CONFIG_ERROR` 和 `UNSUPPORTED_SECURITY_CHALLENGE`。
+5. 至少映射 `SUCCESS`、`ALREADY_DONE`、`AUTH_EXPIRED`、`ACCESS_DENIED`、`TEMPORARY_ERROR`、`SITE_CHANGED`、`CONFIG_ERROR` 和 `UNSUPPORTED_SECURITY_CHALLENGE`。
 6. 检测到安全挑战时执行 CamoFox/noVNC 人工接管流程；人工通过后只恢复经授权的正常取证。不得把人工挑战步骤包装成无人值守签到方案。
 
 ## 阶段 3：生成或修复项目
@@ -55,12 +55,12 @@ description: "分析和实现经用户授权的网站每日签到自动化，生
 3. 对 Python 项目先运行完整离线测试，再运行：
 
    ```text
-   python <skill-directory>/scripts/validate_generated_project.py <generated-project>
+   python <skill-directory>/scripts/validate_generated_project.py <generated-project> --mode generated
    ```
 
    对用户提供的现有 Node.js 项目，运行其锁文件对应的原生测试、lint、依赖审计和部署配置检查；明确说明仓库内 Python 生成项目验证器不适用，不得用一次导入或启动冒充完整验证。
 
-4. 解析生成的 GitHub Actions YAML，确认青龙命令可直接运行，并检查所有失败路径产生非零退出码。
+4. 安装 `requirements-validation.txt` 后解析生成的 GitHub Actions YAML；若环境提供 `actionlint`，同时运行它。确认青龙命令可直接运行，并检查所有失败路径产生非零退出码。
 5. 执行安全审查和差异审查：搜索秘密、个人数据、真实站点残留、完整请求头日志、过宽权限、未固定 Action、联网测试和未验证假设。
 6. 用 [examples/trigger-routing.md](examples/trigger-routing.md) 的正向、拒绝和不触发样例回归检查 Skill 路由。
 

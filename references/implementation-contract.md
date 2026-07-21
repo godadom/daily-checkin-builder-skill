@@ -32,6 +32,7 @@
     │   ├── test_checkin.py
     │   └── test_redaction.py
     ├── docs/site-analysis.md
+    ├── docs/site-contract.json
     ├── .github/workflows/daily-checkin.yml
     ├── .env.example
     ├── .gitignore
@@ -91,6 +92,7 @@
 | `SUCCESS` | 本次完成签到 | 是 |
 | `ALREADY_DONE` | 当天此前已完成 | 是 |
 | `AUTH_EXPIRED` | 凭据失效或需要用户重新认证 | 否 |
+| `ACCESS_DENIED` | 账号已认证但无权执行该操作 | 否 |
 | `TEMPORARY_ERROR` | 超时、限流或可恢复服务端错误 | 否 |
 | `SITE_CHANGED` | 接口或响应结构可能变化 | 否 |
 | `CONFIG_ERROR` | 配置缺失或格式错误 | 否 |
@@ -105,6 +107,7 @@
 
 - 把明确的 401 或认证错误映射为 `AUTH_EXPIRED`；
 - 对 403 区分认证失效、权限拒绝和安全挑战；
+- 把有明确业务证据的权限拒绝映射为 `ACCESS_DENIED`，不得伪装成 CAPTCHA/WAF；
 - 仅在业务响应证明重复签到时把 409 或对应业务码映射为 `ALREADY_DONE`；
 - 把 429、超时和可恢复 5xx 映射为 `TEMPORARY_ERROR`；
 - 把必需字段缺失、内容类型异常或响应模型变化映射为 `SITE_CHANGED`；
@@ -149,9 +152,14 @@
 | `4` | 存在 `TEMPORARY_ERROR` |
 | `5` | 存在 `SITE_CHANGED` |
 | `6` | 存在 `UNSUPPORTED_SECURITY_CHALLENGE` |
+| `7` | 存在 `ACCESS_DENIED` |
 | `70` | 未分类内部错误 |
 
-出现多种失败时按“安全挑战、配置、站点变化、认证、临时错误、内部错误”的明确优先级选择一个非零退出码，并在摘要中保留各状态计数。将选定优先级写入 README 和测试，避免平台间不一致。
+出现多种失败时按“权限拒绝、安全挑战、配置、站点变化、认证、临时错误、内部错误”的明确优先级选择一个非零退出码，并在摘要中保留各状态计数。将选定优先级写入 README 和测试，避免平台间不一致。
+
+## 标记模板与站点实现
+
+让可复用骨架的 `docs/site-contract.json` 使用 `analysis_status: template` 和 `implementation_status: scaffold`。只有完成授权取证、替换基线契约并让实现与 `site-analysis.md` 一致后，才改为 `verified` 与 `site_specific`。模板模式只验证骨架安全；交付项目必须通过生成项目模式，后者应拒绝模板域名、基线标题和 scaffold 占位符残留。测试目录中的脱敏 fixture 和保留域名不属于残留。
 
 ## 生成必需文档
 

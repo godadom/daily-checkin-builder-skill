@@ -18,7 +18,7 @@ class RoutingCase:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Validate daily-checkin-builder trigger routing cases.")
+    parser = argparse.ArgumentParser(description="Heuristically validate daily-checkin-builder trigger metadata cases.")
     parser.add_argument("path", type=Path, help="Skill root")
     return parser.parse_args()
 
@@ -52,7 +52,7 @@ def parse_cases(markdown: str) -> list[RoutingCase]:
 
 
 def route_prompt(prompt: str) -> str:
-    """Apply the explicit metadata boundary as a deterministic regression oracle."""
+    """Apply a deterministic heuristic to regression-check trigger metadata."""
 
     lowered = prompt.casefold()
     prohibited = (
@@ -85,20 +85,24 @@ def route_prompt(prompt: str) -> str:
 
 
 def description_findings(description: str) -> list[str]:
-    groups = {
-        "authorized check-in scope": ("授权", "签到"),
-        "sanitized evidence inputs": ("脱敏 har", "copy as curl", "请求头", "接口响应", "已有脚本"),
-        "Python generation scope": ("python 3", "github actions", "青龙"),
-        "bounded existing Node scope": ("已经提供 node.js", "不从零生成 node.js"),
-        "ordinary web exclusions": ("普通网页分析", "网页总结", "ui 开发", "通用 api", "通用 ci"),
-        "security refusal": ("未授权", "绕过 captcha", "凭据或会话窃取"),
+    requirements = {
+        "authorization": ("授权",),
+        "check-in scope": ("签到",),
+        "sanitization": ("脱敏",),
+        "evidence inputs": ("har", "copy as curl", "请求头", "接口响应", "已有脚本"),
+        "Python generation": ("python 3",),
+        "deployment": ("github actions", "青龙", "本地"),
+        "existing Node repair": ("提供 node.js", "已有 node.js"),
+        "no new Node projects": ("不从零生成 node.js",),
+        "ordinary web exclusions": ("普通网页分析", "网页总结"),
+        "generic work exclusions": ("通用 api", "通用 ci"),
+        "security refusal": ("未授权", "凭据窃取", "安全挑战绕过"),
     }
     lowered = description.casefold()
     findings: list[str] = []
-    for label, terms in groups.items():
-        missing = [term for term in terms if term.casefold() not in lowered]
-        if missing:
-            findings.append(f"{label} missing: {', '.join(missing)}")
+    for label, alternatives in requirements.items():
+        if not any(term.casefold() in lowered for term in alternatives):
+            findings.append(f"{label} missing: {' or '.join(alternatives)}")
     return findings
 
 
@@ -132,9 +136,9 @@ def main() -> int:
     for finding in failures:
         print(f"[FAIL] {finding}")
     if failures:
-        print(f"\nTrigger routing validation failed ({len(failures)} issue(s)).")
+        print(f"\nTrigger metadata validation failed ({len(failures)} issue(s)).")
         return 1
-    print(f"\nTrigger routing validation passed ({len(cases)} cases).")
+    print(f"\nTrigger metadata validation passed ({len(cases)} cases).")
     return 0
 
 

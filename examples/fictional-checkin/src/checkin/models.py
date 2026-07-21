@@ -11,6 +11,7 @@ class CheckinStatus(str, Enum):
     SUCCESS = "SUCCESS"
     ALREADY_DONE = "ALREADY_DONE"
     AUTH_EXPIRED = "AUTH_EXPIRED"
+    ACCESS_DENIED = "ACCESS_DENIED"
     TEMPORARY_ERROR = "TEMPORARY_ERROR"
     SITE_CHANGED = "SITE_CHANGED"
     CONFIG_ERROR = "CONFIG_ERROR"
@@ -19,6 +20,7 @@ class CheckinStatus(str, Enum):
 
 
 EXIT_PRIORITY: tuple[tuple[CheckinStatus, int], ...] = (
+    (CheckinStatus.ACCESS_DENIED, 7),
     (CheckinStatus.UNSUPPORTED_SECURITY_CHALLENGE, 6),
     (CheckinStatus.CONFIG_ERROR, 2),
     (CheckinStatus.SITE_CHANGED, 5),

@@ -53,7 +53,8 @@ def settings(accounts=None) -> Settings:
     return Settings("https://checkin.example.invalid", "/api/checkin/status", "/api/checkin", tuple(accounts or [account()]), max_retries=2)
 
 
-def service(*outcomes, accounts=None):
+def service(*outcomes, accounts=None, auth_provider_factory=None):
     transport = QueueTransport(*outcomes)
     client = ReliableHttpClient(transport, max_retries=2, sleeper=lambda _: None)
-    return CheckinService(settings(accounts), client), transport
+    options = {"auth_provider_factory": auth_provider_factory} if auth_provider_factory else {}
+    return CheckinService(settings(accounts), client, **options), transport

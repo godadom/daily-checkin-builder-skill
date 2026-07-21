@@ -1,0 +1,51 @@
+name: Validate skill
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-validation.txt
+            assets/templates/python-checkin/requirements.txt
+      - name: Install validation dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-validation.txt -r assets/templates/python-checkin/requirements.txt
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Parse GitHub Actions workflows
+        run: actionlint .github/workflows/validate.yml assets/templates/python-checkin/.github/workflows/daily-checkin.yml examples/fictional-checkin/.github/workflows/daily-checkin.yml
+      - name: Validate skill and bundled projects
+        run: python scripts/validate_skill.py .
+      - name: Validate template mode
+        run: python scripts/validate_generated_project.py assets/templates/python-checkin --mode template
+      - name: Validate generated-project mode
+        run: python scripts/validate_generated_project.py examples/fictional-checkin --mode generated
+      - name: Exercise validator mutations
+        run: python scripts/test_validators.py
+      - name: Run template offline tests
+        run: python assets/templates/python-checkin/tests/run_offline.py
+      - name: Run example offline tests
+        run: python examples/fictional-checkin/tests/run_offline.py

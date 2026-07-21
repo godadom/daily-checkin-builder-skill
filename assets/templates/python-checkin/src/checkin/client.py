@@ -38,9 +38,19 @@ class HttpResponse:
     headers: Mapping[str, str]
     body: bytes
     attempts: int = 1
+    header_items: tuple[tuple[str, str], ...] = ()
 
     def json(self) -> object:
         return json.loads(self.body.decode("utf-8"))
+
+    def header_values(self, name: str) -> tuple[str, ...]:
+        values = tuple(
+            value for key, value in self.header_items if key.casefold() == name.casefold()
+        )
+        if values:
+            return values
+        fallback = _header(self, name)
+        return (fallback,) if fallback else ()
 
 
 class NetworkError(RuntimeError):
@@ -111,7 +121,13 @@ class StdlibTransport:
             if connection.sock is not None:
                 connection.sock.settimeout(read_timeout)
             response = connection.getresponse()
-            return HttpResponse(response.status, dict(response.getheaders()), read_bounded(response))
+            header_items = tuple(response.getheaders())
+            return HttpResponse(
+                response.status,
+                dict(header_items),
+                read_bounded(response),
+                header_items=header_items,
+            )
         finally:
             connection.close()
 
