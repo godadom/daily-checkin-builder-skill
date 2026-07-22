@@ -1,6 +1,6 @@
 # GitHub Actions deployment
 
-First replace the scaffold `docs/cookie-setup.md` with the target site's verified instructions. If it selects `interactive_login`, run the generated login command on an operator-controlled machine; never run interactive login in the scheduled workflow. A generated helper may update the repository Secret only through an already authenticated GitHub CLI process using standard input. Otherwise follow the document's exact site-specific Network or Console steps and paste the resulting value directly into the Secret field.
+First replace the scaffold `docs/cookie-setup.md` with the target site's verified instructions. If it selects password, OTP, or another interactive login, run the generated headed-browser command on an operator-controlled machine; enter credentials, one-time codes and human verification only in that visible page. Never run interactive login in the scheduled workflow. A generated helper may update the repository Secret only through an already authenticated GitHub CLI process using standard input.
 
 1. In repository Settings, create Actions secret `CHECKIN_ACCOUNTS` using the JSON format in `README.md`. For a single account, a one-item array is recommended.
 2. Put the verified, non-secret origin and endpoint paths in `src/checkin/site_config.py` before deployment; do not create repository variables for them. Optionally set `CHECKIN_WRITE_JOB_SUMMARY=true` to enable the credential-free job-summary notification step; omit it or set it to `false` to disable that step.

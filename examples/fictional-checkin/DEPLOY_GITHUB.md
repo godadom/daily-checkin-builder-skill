@@ -1,6 +1,6 @@
 # GitHub Actions deployment
 
-The fictional `docs/cookie-setup.md` selects `not_applicable`; configure its bearer token directly as a protected Secret. A real Cookie-based generated project must provide its own verified site-specific acquisition instructions and must not run interactive login in the scheduled workflow.
+The fictional `docs/cookie-setup.md` selects `not_applicable`; configure its bearer token directly as a protected Secret. A real password/OTP Cookie-login project must run its visible browser helper locally and must not run interactive login in the scheduled workflow.
 
 1. In repository Settings, create Actions secret `CHECKIN_ACCOUNTS` using the JSON format in `README.md`. For a single account, a one-item array is recommended.
 2. The verified, non-secret origin and endpoint paths are already in `src/checkin/site_config.py`; do not create repository variables for them. Optionally set `CHECKIN_WRITE_JOB_SUMMARY=true` to enable the credential-free job-summary notification step; omit it or set it to `false` to disable that step.

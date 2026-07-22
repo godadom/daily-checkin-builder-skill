@@ -6,7 +6,7 @@
 
 ## Exact operator steps
 
-No reusable F12 request, header list, Console expression, QR login command, or Cookie name is valid for an unknown site. A generated project must select one evidenced mode: `interactive_login`, `network`, `console`, or `not_applicable`.
+No reusable selector, login URL, F12 request, Console expression, or Cookie name is valid for an unknown site. A generated project must select one evidenced mode: `password_login`, `otp_login`, `interactive_login`, `network`, `console`, or `not_applicable`. Password/OTP modes must link to the generated local headed-browser command. For QingLong, document the exact local helper command, verified OpenAPI settings, destination environment-variable name, and manual panel fallback; do not require a browser inside QingLong.
 
 ## Output and transformation
 

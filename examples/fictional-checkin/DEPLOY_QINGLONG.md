@@ -39,7 +39,7 @@ Before enabling the schedule, run these commands manually in the task directory:
 
 The first command is fully offline. The second is a live authorized run and must be used only after the protected environment values are configured.
 
-This fictional example's `docs/cookie-setup.md` selects `not_applicable`, so it has no Cookie login task. A real generated project that selects `interactive_login` must provide a separate manual-only login command and securely add or update the QingLong environment variable without logging its value.
+This fictional example's `docs/cookie-setup.md` selects `not_applicable`, so it has no browser login task. A real generated project using password, OTP, or another interactive login must provide a local headed-browser helper run on the operator's desktop. That helper may securely update the QingLong environment variable through a verified OpenAPI, but QingLong must never schedule or host the interactive login command.
 
 ## Operate, rotate, and disable
 

@@ -67,8 +67,8 @@ def route_prompt(prompt: str) -> str:
     supported_work = (
         "sanitized", "cURL", "har", "cookie", "csrf", "token", "script",
         "automation", "automate", "github actions", "qinglong", "repair",
-        "convert", "build", "camofox", "noVNC", "接口", "脚本", "自动化",
-        "修复", "青龙", "脱敏",
+        "convert", "build", "password", "otp", "headed", "login", "接口", "脚本", "自动化",
+        "修复", "青龙", "脱敏", "账号密码", "验证码",
     )
     ordinary_only = (
         "summarize", "summary", "redesign", "ordinary ui", "public webpage",

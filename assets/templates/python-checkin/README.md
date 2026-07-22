@@ -44,7 +44,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: a normal `Set-Cookie` response updates only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. When verified evidence supports an official QR/device/OAuth flow, the generated project may add a manual `login.py` that receives the successful session and writes it to the selected protected secret store without logging it. Otherwise `docs/cookie-setup.md` must name the exact target-site Network request or safe same-origin Console expression and the final environment-variable shape. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: a normal `Set-Cookie` response updates only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. `src/checkin/interactive_login.py` supplies the secret-safe state machine for a generated site adapter: the operator runs a local companion helper and enters a password, SMS/email code, or human-verification response in the same headed browser context; successful login saves only whitelisted cookies. For QingLong, the local helper may write the resulting cookie through a verified OpenAPI, while the QingLong task itself remains browser-free. This scaffold does not invent selectors or install a browser dependency until site evidence requires it. Tests inject mock browser/HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes.
 
 ## Deployment
 
@@ -53,6 +53,7 @@ See `DEPLOY_GITHUB.md` for Secrets, variables, schedule, logs, and disabling the
 ## Troubleshooting and safety
 
 - `AUTH_EXPIRED`: perform the site's normal login or documented token refresh, then replace the secret. Do not scrape browser databases.
+- Interactive login: run the generated manual `login.py`; enter passwords and OTPs only in the visible site page. Scheduled check-in never opens a login UI.
 - `ACCESS_DENIED`: stop the task and verify account entitlement or site policy; do not retry or bypass permissions.
 - `SITE_CHANGED`: compare a newly sanitized Network capture with `docs/site-analysis.md`, update the response parser, and extend mock fixtures before deploying.
 - `TEMPORARY_ERROR`: check service health, rate-limit headers, and timeout settings. Do not increase concurrency to defeat limits.

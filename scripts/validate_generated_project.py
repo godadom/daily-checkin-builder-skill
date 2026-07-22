@@ -780,19 +780,44 @@ def cookie_setup_findings(root: Path, mode: str) -> list[Finding]:
         if acquisition_mode != "template":
             findings.append(Finding(path, 0, "template Cookie setup Acquisition mode must be 'template'"))
     else:
-        allowed_modes = {"interactive_login", "network", "console", "not_applicable"}
+        allowed_modes = {
+            "password_login",
+            "otp_login",
+            "interactive_login",
+            "network",
+            "console",
+            "not_applicable",
+        }
         if acquisition_mode not in allowed_modes:
             findings.append(
                 Finding(path, 0, "generated Cookie setup must use an evidenced site-specific acquisition mode")
             )
-        if acquisition_mode == "interactive_login":
+        if acquisition_mode in {"password_login", "otp_login", "interactive_login"}:
             groups = {
-                "manual login command": ("login command", "登录命令", "login.py"),
-                "bounded polling": ("timeout", "超时", "bounded", "有界"),
-                "successful session response": ("set-cookie",),
+                "local manual login command": ("login.py",),
+                "headed browser": ("headed", "可视浏览器", "可视页面"),
+                "same browser context": ("same context", "同一 context", "同一浏览器"),
+                "Cookie-name whitelist": ("cookie name", "cookie 名称", "白名单 cookie"),
                 "protected persistence": ("environment variable", "环境变量", "secret"),
                 "no secret logging": ("do not log", "不得打印", "不打印"),
+                "human challenge handoff": ("human verification", "人机验证", "challenge"),
             }
+            if acquisition_mode == "password_login":
+                groups.update({
+                    "credential entry": ("password", "密码"),
+                    "local or protected input": ("visible page", "可视页面", "protected environment", "受保护环境"),
+                })
+            elif acquisition_mode == "otp_login":
+                groups.update({
+                    "SMS or email OTP": ("sms", "email", "短信", "邮箱"),
+                    "manual OTP entry": ("manual", "手动", "用户输入"),
+                    "no OTP interception": ("不读取短信", "do not read sms", "不读取邮箱", "do not read email"),
+                })
+            else:
+                groups.update({
+                    "bounded polling": ("timeout", "超时", "bounded", "有界"),
+                    "successful session response": ("set-cookie",),
+                })
             for label, alternatives in groups.items():
                 if not any(term.casefold() in lowered for term in alternatives):
                     findings.append(Finding(path, 0, f"interactive Cookie setup lacks {label}"))

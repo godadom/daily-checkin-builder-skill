@@ -119,7 +119,7 @@
 - 把验证码、WAF、设备证明等不可自动化挑战映射为 `UNSUPPORTED_SECURITY_CHALLENGE`；
 - 把未知内部异常记录为脱敏错误，并返回非零退出码。
 
-站点分析阶段可按 [CamoFox 与 noVNC 人工接管](camofox-human-handoff.md) 请求用户本人手动通过挑战，但生成项目不得包含验证码求解、挑战 Token 提取、打码服务、反检测配置或无人值守挑战绕过逻辑。只有在人工通过后已验证日常签到请求可在目标部署环境中不再触发挑战，才可交付定时执行；否则保持 `UNSUPPORTED_SECURITY_CHALLENGE`。
+手动 `login.py` 可按 [账号密码、验证码与人机验证交互登录](interactive-login.md) 在操作者电脑的同一本地 headed 浏览器会话中等待用户本人完成挑战，再读取白名单 Cookie；签到 cron 不启动交互浏览器。目标为青龙时，本地助手通过已验证 OpenAPI 更新 Cookie，青龙容器只运行统一签到入口。只有已验证日常签到请求在目标部署环境中不再触发挑战，才可交付定时执行；否则保持 `UNSUPPORTED_SECURITY_CHALLENGE`。生成项目不得包含验证码求解、挑战 Token 提取、打码服务、反检测配置或无人值守挑战绕过逻辑。
 
 刷新 Token 时最多执行一次受控刷新，再重放确定安全的请求。刷新失败后返回 `AUTH_EXPIRED`，不得循环刷新。
 

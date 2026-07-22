@@ -119,10 +119,9 @@
 若出现 Turnstile、reCAPTCHA、hCaptcha、WAF 挑战、设备证明、WebAuthn 或短信验证：
 
 - 停止自动提交和重试；
-- 按 [CamoFox 与 noVNC 人工接管](camofox-human-handoff.md) 显式调用 `$camofox-browser`，只做经授权的正常页面导航、兼容性观察和会话延续；
-- 若挑战未在正常导航中消失，切换到 virtual display、重建失效标签页、打开返回的 noVNC `vncUrl`，请求用户本人手动完成；
-- 人工确认完成后，在同一授权会话重新获取标签页与页面快照，再继续脱敏取证；
-- noVNC 不可用、用户未完成、挑战循环出现，或无人值守部署仍依赖人工挑战时，记录为 `UNSUPPORTED_SECURITY_CHALLENGE`；
+- 若挑战发生在手动账号密码/OTP 登录中，按 [交互登录流程](interactive-login.md) 保持操作者电脑上的同一本地 headed 浏览器 context，让用户在原页面完成；青龙仅接收最终 Cookie，不运行浏览器；
+- 人工完成后只按已验证的成功 URL、DOM 或响应判据继续，并从当前 context 读取白名单 Cookie；
+- 若挑战发生在无人值守签到中、用户未完成、挑战循环出现或无法安全提供可视会话，记录为 `UNSUPPORTED_SECURITY_CHALLENGE` 或登录状态 `LOGIN_UI_UNAVAILABLE`；
 - 不得自动求解验证码、调用打码服务、提取挑战 Token、轮换代理或指纹、隐藏自动化、规避检测或重放挑战结果。
 
 ## 管理不确定性

@@ -46,7 +46,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account, but Cookie login is not enabled for this example because the fictional evidence does not support it. The default provider never invents a login or refresh endpoint. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account, but Cookie login is not enabled for this example because the fictional evidence does not support it. The reusable `interactive_login.py` state machine is covered only by offline fakes here; this example has no selectors, `login.py`, browser dependency, or remote UI. The default provider never invents a login or refresh endpoint. Tests inject mock HTTP/browser responses and never contact a real site.
 
 ## Deployment
 

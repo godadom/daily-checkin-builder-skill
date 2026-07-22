@@ -26,7 +26,7 @@ REQUIRED_REFERENCES = (
     "references/intake.md",
     "references/cookie-acquisition.md",
     "references/site-analysis.md",
-    "references/camofox-human-handoff.md",
+    "references/interactive-login.md",
     "references/implementation-contract.md",
     "references/github-actions.md",
     "references/qinglong.md",
@@ -878,34 +878,42 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ref_detail.append("empty: " + ", ".join(empty_refs))
     reporter.check("required reference files", refs_ok, "; ".join(ref_detail))
 
-    handoff_path = root / "references/camofox-human-handoff.md"
-    handoff_terms = (
-        "$camofox-browser",
-        "当前说明",
-        "noVNC",
-        "临时敏感",
-        "等待用户明确确认",
-        "UNSUPPORTED_SECURITY_CHALLENGE",
-        "不得启用代理轮换",
+    interactive_path = root / "references/interactive-login.md"
+    interactive_terms = (
+        "password_login",
+        "otp_login",
+        "WAITING_FOR_CREDENTIALS",
+        "WAITING_FOR_OTP",
+        "WAITING_FOR_CHALLENGE",
+        "LOGIN_UI_UNAVAILABLE",
+        "headed",
+        "青龙 OpenAPI",
+        "不得在青龙中创建浏览器登录任务",
+        "不得读取短信",
+        "同一 context",
     )
-    missing_handoff_terms: list[str] = []
+    missing_interactive_terms: list[str] = []
     try:
-        handoff_text = read_text(handoff_path) if handoff_path.is_file() else ""
-        missing_handoff_terms.extend(term for term in handoff_terms if term not in handoff_text)
-        for term in ("$camofox-browser", "noVNC", "references/camofox-human-handoff.md"):
+        interactive_text = read_text(interactive_path) if interactive_path.is_file() else ""
+        missing_interactive_terms.extend(
+            term for term in interactive_terms if term not in interactive_text
+        )
+        for term in ("references/interactive-login.md", "青龙容器不安装或运行浏览器"):
             if term not in skill_text:
-                missing_handoff_terms.append(f"SKILL.md:{term}")
+                missing_interactive_terms.append(f"SKILL.md:{term}")
     except (OSError, UnicodeError) as exc:
-        missing_handoff_terms.append(f"cannot read handoff reference: {exc}")
+        missing_interactive_terms.append(f"cannot read interactive-login reference: {exc}")
     reporter.check(
-        "CamoFox human-handoff contract",
-        not missing_handoff_terms,
-        "missing: " + ", ".join(missing_handoff_terms) if missing_handoff_terms else "",
+        "local interactive-login contract",
+        not missing_interactive_terms,
+        "missing: " + ", ".join(missing_interactive_terms) if missing_interactive_terms else "",
     )
 
     cookie_path = root / "references/cookie-acquisition.md"
     cookie_terms = (
         "docs/cookie-setup.md",
+        "password_login",
+        "otp_login",
         "interactive_login",
         "network",
         "console",
@@ -928,6 +936,48 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "Cookie acquisition contract",
         not missing_cookie_terms,
         "missing: " + ", ".join(missing_cookie_terms) if missing_cookie_terms else "",
+    )
+
+    interactive_runtime_findings: list[str] = []
+    runtime_terms = (
+        "WAITING_FOR_CREDENTIALS",
+        "WAITING_FOR_OTP",
+        "WAITING_FOR_CHALLENGE",
+        "LOGIN_UI_UNAVAILABLE",
+        "allowed_origins",
+        "required_cookie_names",
+        "CookieSecretStore",
+    )
+    test_terms = (
+        "test_password_login_keeps_context_for_human_challenge_and_saves_whitelist",
+        "test_otp_and_challenge_are_waiting_states_for_manual_page_input",
+        "test_timeout_is_bounded_and_closes_session",
+        "test_missing_required_cookie_is_site_changed_and_not_stored",
+        "test_storage_failure_does_not_expose_cookie",
+        "test_unavailable_visible_browser_is_distinct",
+        "test_cookie_value_cannot_inject_another_cookie",
+        "test_allowed_origins_must_be_https_origins",
+    )
+    for project, _mode in BUNDLED_PROJECTS:
+        runtime_path = root / project / "src/checkin/interactive_login.py"
+        test_path = root / project / "tests/test_interactive_login.py"
+        try:
+            runtime_text = read_text(runtime_path) if runtime_path.is_file() else ""
+            test_text = read_text(test_path) if test_path.is_file() else ""
+        except (OSError, UnicodeError) as exc:
+            interactive_runtime_findings.append(f"{project}: cannot read interactive login files: {exc}")
+            continue
+        for term in runtime_terms:
+            if term not in runtime_text:
+                interactive_runtime_findings.append(f"{project}:runtime:{term}")
+        for term in test_terms:
+            if term not in test_text:
+                interactive_runtime_findings.append(f"{project}:tests:{term}")
+    reporter.check(
+        "bundled interactive-login runtime and tests",
+        not interactive_runtime_findings,
+        "missing: " + ", ".join(interactive_runtime_findings)
+        if interactive_runtime_findings else "",
     )
 
     agent_file = root / REQUIRED_AGENT_FILE

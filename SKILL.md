@@ -1,6 +1,6 @@
 ---
 name: daily-checkin-builder
-description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL、请求头、接口响应或已有脚本，并生成或修复支持 Cookie、Token、CSRF、多账号和安全重试的 Python 3 自动化，部署到 GitHub Actions、青龙或本地。用户已经提供 Node.js 签到项目时可原位修复，但不从零生成 Node.js。普通网页分析、网页总结、爬取、UI 开发、通用 API/CI，以及未授权访问、凭据窃取、安全挑战绕过、批量注册或刷奖励均不使用。"
+description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL、请求头、接口响应或已有脚本，并生成或修复支持 Cookie、Token、CSRF、多账号、安全重试以及站点专用账号密码/短信或邮箱验证码交互登录的 Python 3 自动化，部署到 GitHub Actions、青龙或本地。用户已经提供 Node.js 签到项目时可原位修复，但不从零生成 Node.js。普通网页分析、网页总结、爬取、UI 开发、通用 API/CI，以及未授权访问、凭据窃取、安全挑战绕过、批量注册或刷奖励均不使用。"
 ---
 
 # 每日签到项目构建
@@ -12,7 +12,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 1. 将用户直接提出的“分析、生成或修复其签到自动化”请求，视为其对账号归属、正常自动化许可和所述取证范围的声明；直接开始分析，不要求复述固定确认话术。只有账号归属或范围互相矛盾、不明，材料疑似来自他人，或请求触及禁止边界时才暂停澄清。
 2. 要求用户先把用于分析的 Cookie、Authorization、Token、密码、手机号、邮箱、设备标识和个人数据替换为明显占位符。若运行时需要 Cookie，按 [references/cookie-acquisition.md](references/cookie-acquisition.md) 为目标站点生成独有的获取与保存方案；不得用一份通用浏览器说明代替站点取证。若材料意外包含秘密，不要复述、写盘或提交；提醒用户立即轮换。
 3. 只复现用户正常访问时浏览器可见的请求、CSRF 获取方式和客户端公开执行的签名逻辑。
-4. 遇到 Turnstile、reCAPTCHA、hCaptcha、WAF、设备证明、WebAuthn、短信验证或其他安全挑战时，立即停止自动提交与重试，并按 [references/camofox-human-handoff.md](references/camofox-human-handoff.md) 检查可选的 `$camofox-browser` 能力。可用时读取其当前说明并尝试一次正常导航；挑战仍存在时按当前 noVNC 流程请求用户本人手动完成。能力不可用、人工接管失败或无人值守执行仍会遇到挑战时，标记为 `UNSUPPORTED_SECURITY_CHALLENGE`。不得自动求解、代打码、规避检测或扩大权限。
+4. 区分手动登录与无人值守签到：账号密码、短信/邮箱验证码登录中的人机验证按 [references/interactive-login.md](references/interactive-login.md) 在同一可视浏览器会话中交给用户本人完成；定时签到运行中再次出现挑战时停止并标记 `UNSUPPORTED_SECURITY_CHALLENGE`。不得自动求解、代打码、拦截验证码、规避检测或扩大权限。
 5. 拒绝未授权访问、凭据窃取、暴力破解、隐蔽爬取、攻击、批量注册、刷奖励和活动规则滥用。不要提供规避、隐匿或提取他人会话的方法。
 
 详细边界、秘密处理和日志规则见 [references/security.md](references/security.md)。
@@ -29,17 +29,17 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 1. 在生成项目中先建立 `docs/site-analysis.md`，按 [references/site-analysis.md](references/site-analysis.md) 记录证据、请求序列、状态判据和未验证假设；同时把 `docs/site-contract.json` 从 `template/scaffold` 更新为 `verified/site_specific`。绝不记录真实秘密，证据不足时不得伪造 verified 状态。
 2. 按以下顺序选择实现：正式 API；浏览器实际调用的稳定 HTTP API；必要的公开客户端签名；最后才是在不绕过安全挑战前提下的浏览器自动化。
 3. 识别登录、签到前查询、签到请求、签到后验证、CSRF、Token 刷新、重定向和动态参数。没有证据的字段保持为明确假设或阻塞项。
-4. 对 Cookie 认证单独形成 `docs/cookie-setup.md`：优先使用站点或 App 已证实的二维码、设备授权、OAuth 等正常交互登录，让用户本人完成登录后由程序从该会话的 `Set-Cookie` 获取并安全保存；否则根据该站点的 Network 取证写明精确请求、Cookie 名称、字符串形状、处理方式和目标环境变量。只有证据证明所需 Cookie 可由页面 JavaScript 读取时，才给出最小的站点专用 Console 指令；`HttpOnly` Cookie 必须从目标请求的 Request Headers 获取。不得输出泛化步骤或猜测指令。
+4. 对 Cookie 认证单独形成 `docs/cookie-setup.md`：优先实现有证据的 `password_login`、`otp_login`、二维码、设备授权或 OAuth 等正常交互登录。账号密码可由用户直接在可视页面输入，或从受保护运行时变量填入已验证选择器；短信/邮箱验证码和人机验证只由用户在同一页面输入/完成。登录成功后程序从该浏览器上下文读取白名单 Cookie 并安全保存。没有可实现的正式登录时，再按该站点 Network 或安全 Console 取证生成精确说明。
 5. 不以 HTTP 200 单独判定成功；组合业务状态码、响应字段、签到状态查询或余额/积分变化。
 6. 至少映射 `SUCCESS`、`ALREADY_DONE`、`AUTH_EXPIRED`、`ACCESS_DENIED`、`TEMPORARY_ERROR`、`SITE_CHANGED`、`CONFIG_ERROR` 和 `UNSUPPORTED_SECURITY_CHALLENGE`。
-7. 检测到安全挑战时执行 CamoFox/noVNC 人工接管流程；人工通过后只恢复经授权的正常取证。不得把人工挑战步骤包装成无人值守签到方案。
+7. 为账号密码或验证码登录记录成功 URL/DOM/响应判据、登录失败、验证码发送/过期、人机验证出现、用户取消和总超时；人机验证期间保持浏览器上下文不变，用户完成后再验证登录成功并读取 Cookie。不得把人工登录步骤包装成无人值守签到方案。
 
 ## 阶段 3：生成或修复项目
 
 1. 读取 [references/implementation-contract.md](references/implementation-contract.md)。新建项目或处理 Python 项目时，从 `assets/templates/python-checkin/` 复制骨架，再用已验证事实替换显式占位符；用户已提供 Node.js 项目时保留其结构，只移植同一安全、状态和部署契约。不要把真实凭据写入任何文件。
 2. 分离配置、认证、HTTP 客户端、业务状态机、日志脱敏、通知和入口；GitHub Actions、青龙与本地运行必须共用同一业务入口。
 3. 将已验证、固定且非敏感的站点事实（origin、路径、固定公开请求头、公开字段名）内置在项目的 `src/checkin/site_config.py`，并在 `site-analysis.md` 标明证据；不得要求操作者把这些值设为环境变量。仅从环境变量、GitHub Secrets 或青龙环境变量读取 Cookie、Token、密码等秘密，以及可变的运行参数。支持结构化多账号配置，并给出格式校验和不泄密的错误信息。
-4. 若站点有已证实的正常交互登录流程，生成站点专用的手动 `login.py`（或现有项目等价入口）及所选平台的安全持久化适配器。登录入口只由操作者手动运行，不加入 cron；使用有界轮询与超时，只接收正式登录结果，只保存白名单 Cookie，不打印 Cookie。青龙可使用已证实的 OpenAPI 新增/更新环境变量；GitHub 可在操作者本机通过已登录的 `gh secret set` 标准输入保存。无法安全自动持久化时，在站点专用文档中给出精确的人工设置步骤。
+4. 按 [references/interactive-login.md](references/interactive-login.md) 从模板的 `interactive_login.py` 状态机生成站点专用 `login.py` 与可视浏览器适配器。登录入口只由操作者在自己的桌面电脑手动运行，不加入 cron；它用本地 headed 浏览器让用户输入账号密码、验证码并在原页面完成人机验证。目标为青龙时，本地助手通过已验证的青龙 OpenAPI 更新环境变量；青龙容器不安装或运行浏览器。目标为 GitHub 时，只允许操作者在本机通过已登录的 `gh secret set` 标准输入保存。全程不打印账号、密码、验证码或 Cookie。
 5. 设置连接与读取超时。仅对确定安全的请求自动重试；签到 POST 未确认幂等时，先查询状态再决定是否重试。处理 401、403、409、429、5xx 和 `Retry-After`。
 6. 默认串行或低并发执行多账号；单个账号失败不得阻止其余账号，但整体失败必须产生非零退出码。
 7. 将异常、HTTP 调试信息和用户声明的敏感字段一并脱敏；禁止记录完整请求头。
@@ -85,7 +85,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 - 输入问卷与脱敏：[references/intake.md](references/intake.md)
 - 站点专用 Cookie 获取与登录交付：[references/cookie-acquisition.md](references/cookie-acquisition.md)
 - 站点流程取证：[references/site-analysis.md](references/site-analysis.md)
-- CamoFox 与 noVNC 人工接管：[references/camofox-human-handoff.md](references/camofox-human-handoff.md)
+- 账号密码、验证码与人机验证交互登录：[references/interactive-login.md](references/interactive-login.md)
 - 项目与状态契约：[references/implementation-contract.md](references/implementation-contract.md)
 - GitHub Actions：[references/github-actions.md](references/github-actions.md)
 - 青龙面板：[references/qinglong.md](references/qinglong.md)
