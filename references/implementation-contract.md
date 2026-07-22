@@ -15,6 +15,7 @@
 默认采用以下结构；小项目可合并文件，但必须保留职责边界：
 
     generated-checkin/
+    ├── login.py
     ├── src/checkin/
     │   ├── __init__.py
     │   ├── site_config.py
@@ -33,6 +34,7 @@
     │   ├── test_checkin.py
     │   └── test_redaction.py
     ├── docs/site-analysis.md
+    ├── docs/cookie-setup.md
     ├── docs/site-contract.json
     ├── .github/workflows/daily-checkin.yml
     ├── .env.example
@@ -54,6 +56,7 @@
 - 让 `logging_utils.py` 在日志边界统一脱敏；
 - 让 `notifier.py` 只接收脱敏摘要，不读取完整 HTTP 请求；
 - 让 `main.py` 编排多账号、通知、汇总和退出码。
+- 只在有已证实的交互登录流程时生成 `login.py`；让它编排站点专用登录与秘密存储，不复制签到业务，也不被 cron 调用。
 
 禁止模块在导入时发起网络请求或读取秘密文件。
 
@@ -166,6 +169,8 @@
 
 ## 生成必需文档
 
-让 README 覆盖用途、授权、平台、原理、环境变量、本地运行、多账号、状态、常见错误和安全事项。分别生成 GitHub Actions 与青龙部署文档；生成 `SECURITY.md` 说明凭据保护、轮换、脱敏报告和不会绕过的安全机制。
+让 README 覆盖用途、授权、平台、原理、环境变量、本地运行、多账号、状态、常见错误和安全事项，并链接 `docs/cookie-setup.md`。该文档必须声明 `Acquisition mode`；Cookie 认证时写成站点专用的 `interactive_login`、`network` 或 `console`，不用 Cookie 时写 `not_applicable` 并说明实际认证方式。不得交付 `template` 模式或泛化 F12 说明。分别生成 GitHub Actions 与青龙部署文档；生成 `SECURITY.md` 说明凭据保护、轮换、脱敏报告和不会绕过的安全机制。
+
+若生成 `login.py`，把站点固定登录路径、正式状态码、必需 Cookie 名称和公开轮询间隔内置为已验证事实；秘密存储的 Client Secret、GitHub 凭据或 Cookie 本身仍只从受保护运行时进入。登录入口必须设置总超时、取消路径、Cookie 白名单、同源限制与全边界脱敏，并提供 mock 测试。
 
 在交付前按 [测试规范](testing.md) 验证状态机、重试、脱敏、退出码和多账号汇总。

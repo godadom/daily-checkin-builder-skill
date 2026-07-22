@@ -10,7 +10,7 @@ The fictional evidence maps `GET /v1/daily/status` to the preflight/status query
 
 ## Configuration
 
-The verified, non-secret fictional site facts are source-controlled in `src/checkin/site_config.py`. Do not set or override them through environment variables; use environment variables only for secrets and runtime choices.
+The verified, non-secret fictional site facts are source-controlled in `src/checkin/site_config.py`. `docs/cookie-setup.md` records `not_applicable` because the fictional evidence observes bearer authentication, not Cookie authentication. Do not set or override fixed facts through environment variables; use environment variables only for secrets and runtime choices.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: a normal `Set-Cookie` response updates only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. If the verified flow needs an initial Cookie, obtain the minimum first-party request Cookie from the operator's normal browser session and put it directly in the protected secret store; never copy a browser profile or Cookie database. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account, but Cookie login is not enabled for this example because the fictional evidence does not support it. The default provider never invents a login or refresh endpoint. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
 
 ## Deployment
 

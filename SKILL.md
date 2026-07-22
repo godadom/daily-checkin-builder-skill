@@ -10,7 +10,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 ## 守住授权和安全边界
 
 1. 将用户直接提出的“分析、生成或修复其签到自动化”请求，视为其对账号归属、正常自动化许可和所述取证范围的声明；直接开始分析，不要求复述固定确认话术。只有账号归属或范围互相矛盾、不明，材料疑似来自他人，或请求触及禁止边界时才暂停澄清。
-2. 要求用户先把用于分析的 Cookie、Authorization、Token、密码、手机号、邮箱、设备标识和个人数据替换为明显占位符。若运行时确实需要 Cookie，按 [references/cookie-acquisition.md](references/cookie-acquisition.md) 先尝试正常、已证实的程序化会话获取；无法获取时提供详细的人工导出与安全保存说明。若材料意外包含秘密，不要复述、写盘或提交；提醒用户立即轮换。
+2. 要求用户先把用于分析的 Cookie、Authorization、Token、密码、手机号、邮箱、设备标识和个人数据替换为明显占位符。若运行时需要 Cookie，按 [references/cookie-acquisition.md](references/cookie-acquisition.md) 为目标站点生成独有的获取与保存方案；不得用一份通用浏览器说明代替站点取证。若材料意外包含秘密，不要复述、写盘或提交；提醒用户立即轮换。
 3. 只复现用户正常访问时浏览器可见的请求、CSRF 获取方式和客户端公开执行的签名逻辑。
 4. 遇到 Turnstile、reCAPTCHA、hCaptcha、WAF、设备证明、WebAuthn、短信验证或其他安全挑战时，立即停止自动提交与重试，并按 [references/camofox-human-handoff.md](references/camofox-human-handoff.md) 检查可选的 `$camofox-browser` 能力。可用时读取其当前说明并尝试一次正常导航；挑战仍存在时按当前 noVNC 流程请求用户本人手动完成。能力不可用、人工接管失败或无人值守执行仍会遇到挑战时，标记为 `UNSUPPORTED_SECURITY_CHALLENGE`。不得自动求解、代打码、规避检测或扩大权限。
 5. 拒绝未授权访问、凭据窃取、暴力破解、隐蔽爬取、攻击、批量注册、刷奖励和活动规则滥用。不要提供规避、隐匿或提取他人会话的方法。
@@ -29,18 +29,20 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 1. 在生成项目中先建立 `docs/site-analysis.md`，按 [references/site-analysis.md](references/site-analysis.md) 记录证据、请求序列、状态判据和未验证假设；同时把 `docs/site-contract.json` 从 `template/scaffold` 更新为 `verified/site_specific`。绝不记录真实秘密，证据不足时不得伪造 verified 状态。
 2. 按以下顺序选择实现：正式 API；浏览器实际调用的稳定 HTTP API；必要的公开客户端签名；最后才是在不绕过安全挑战前提下的浏览器自动化。
 3. 识别登录、签到前查询、签到请求、签到后验证、CSRF、Token 刷新、重定向和动态参数。没有证据的字段保持为明确假设或阻塞项。
-4. 不以 HTTP 200 单独判定成功；组合业务状态码、响应字段、签到状态查询或余额/积分变化。
-5. 至少映射 `SUCCESS`、`ALREADY_DONE`、`AUTH_EXPIRED`、`ACCESS_DENIED`、`TEMPORARY_ERROR`、`SITE_CHANGED`、`CONFIG_ERROR` 和 `UNSUPPORTED_SECURITY_CHALLENGE`。
-6. 检测到安全挑战时执行 CamoFox/noVNC 人工接管流程；人工通过后只恢复经授权的正常取证。不得把人工挑战步骤包装成无人值守签到方案。
+4. 对 Cookie 认证单独形成 `docs/cookie-setup.md`：优先使用站点或 App 已证实的二维码、设备授权、OAuth 等正常交互登录，让用户本人完成登录后由程序从该会话的 `Set-Cookie` 获取并安全保存；否则根据该站点的 Network 取证写明精确请求、Cookie 名称、字符串形状、处理方式和目标环境变量。只有证据证明所需 Cookie 可由页面 JavaScript 读取时，才给出最小的站点专用 Console 指令；`HttpOnly` Cookie 必须从目标请求的 Request Headers 获取。不得输出泛化步骤或猜测指令。
+5. 不以 HTTP 200 单独判定成功；组合业务状态码、响应字段、签到状态查询或余额/积分变化。
+6. 至少映射 `SUCCESS`、`ALREADY_DONE`、`AUTH_EXPIRED`、`ACCESS_DENIED`、`TEMPORARY_ERROR`、`SITE_CHANGED`、`CONFIG_ERROR` 和 `UNSUPPORTED_SECURITY_CHALLENGE`。
+7. 检测到安全挑战时执行 CamoFox/noVNC 人工接管流程；人工通过后只恢复经授权的正常取证。不得把人工挑战步骤包装成无人值守签到方案。
 
 ## 阶段 3：生成或修复项目
 
 1. 读取 [references/implementation-contract.md](references/implementation-contract.md)。新建项目或处理 Python 项目时，从 `assets/templates/python-checkin/` 复制骨架，再用已验证事实替换显式占位符；用户已提供 Node.js 项目时保留其结构，只移植同一安全、状态和部署契约。不要把真实凭据写入任何文件。
 2. 分离配置、认证、HTTP 客户端、业务状态机、日志脱敏、通知和入口；GitHub Actions、青龙与本地运行必须共用同一业务入口。
 3. 将已验证、固定且非敏感的站点事实（origin、路径、固定公开请求头、公开字段名）内置在项目的 `src/checkin/site_config.py`，并在 `site-analysis.md` 标明证据；不得要求操作者把这些值设为环境变量。仅从环境变量、GitHub Secrets 或青龙环境变量读取 Cookie、Token、密码等秘密，以及可变的运行参数。支持结构化多账号配置，并给出格式校验和不泄密的错误信息。
-4. 设置连接与读取超时。仅对确定安全的请求自动重试；签到 POST 未确认幂等时，先查询状态再决定是否重试。处理 401、403、409、429、5xx 和 `Retry-After`。
-5. 默认串行或低并发执行多账号；单个账号失败不得阻止其余账号，但整体失败必须产生非零退出码。
-6. 将异常、HTTP 调试信息和用户声明的敏感字段一并脱敏；禁止记录完整请求头。
+4. 若站点有已证实的正常交互登录流程，生成站点专用的手动 `login.py`（或现有项目等价入口）及所选平台的安全持久化适配器。登录入口只由操作者手动运行，不加入 cron；使用有界轮询与超时，只接收正式登录结果，只保存白名单 Cookie，不打印 Cookie。青龙可使用已证实的 OpenAPI 新增/更新环境变量；GitHub 可在操作者本机通过已登录的 `gh secret set` 标准输入保存。无法安全自动持久化时，在站点专用文档中给出精确的人工设置步骤。
+5. 设置连接与读取超时。仅对确定安全的请求自动重试；签到 POST 未确认幂等时，先查询状态再决定是否重试。处理 401、403、409、429、5xx 和 `Retry-After`。
+6. 默认串行或低并发执行多账号；单个账号失败不得阻止其余账号，但整体失败必须产生非零退出码。
+7. 将异常、HTTP 调试信息和用户声明的敏感字段一并脱敏；禁止记录完整请求头。
 
 ## 阶段 4：生成部署配置
 
@@ -51,7 +53,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 ## 阶段 5：验证
 
 1. 读取 [references/testing.md](references/testing.md)，使用 mock HTTP 和脱敏 fixture 覆盖配置、单/多账号、成功、已签到、认证过期、CSRF、超时、429、5xx、响应漂移、日志脱敏、部分失败和防重复重试。
-2. 默认禁止测试访问真实站点。仅在用户明确授权并主动设置 `LIVE_TEST=1` 时运行 live test；不得在 Pull Request 或 fork 工作流中自动启用。
+2. 默认禁止测试访问真实站点。仅在用户直接请求已涵盖该站点正常取证范围且主动设置 `LIVE_TEST=1` 时运行 live test；不得要求复述授权话术，也不得在 Pull Request 或 fork 工作流中自动启用。
 3. 对 Python 项目先运行完整离线测试，再运行：
 
    ```text
@@ -81,7 +83,7 @@ description: "为经授权账号分析脱敏的签到 URL、HAR、Copy as cURL�
 ## 参考文件导航
 
 - 输入问卷与脱敏：[references/intake.md](references/intake.md)
-- Cookie 获取与会话续用：[references/cookie-acquisition.md](references/cookie-acquisition.md)
+- 站点专用 Cookie 获取与登录交付：[references/cookie-acquisition.md](references/cookie-acquisition.md)
 - 站点流程取证：[references/site-analysis.md](references/site-analysis.md)
 - CamoFox 与 noVNC 人工接管：[references/camofox-human-handoff.md](references/camofox-human-handoff.md)
 - 项目与状态契约：[references/implementation-contract.md](references/implementation-contract.md)

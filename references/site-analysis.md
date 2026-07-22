@@ -82,7 +82,7 @@
 - Query、JSON、Form 或 Multipart 的字段与类型；
 - 必需头和可删除头；
 - Cookie、Access Token、Refresh Token、CSRF 的不同用途；
-- Cookie 获取结论：正常响应是否返回 `Set-Cookie`、是否有已证实的正式刷新流程、或是否必须由操作者按 [Cookie 获取与会话续用](cookie-acquisition.md) 人工种子；只记录 Cookie 名称、第一方域名和过期特征，不记录值；
+- Cookie 获取结论：按 [站点专用 Cookie 获取与登录交付](cookie-acquisition.md) 确定 `interactive_login`、`network`、`console` 或 `not_applicable`；记录具体登录/状态请求、必需 Cookie 名称、第一方域名、`HttpOnly` 属性、字符串处理、目标环境变量和过期特征，不记录值；
 - 重定向是否改变方法、主机、Cookie 或认证状态；
 - 动态值的来源、生命周期和重放限制；
 - 请求是否幂等；
@@ -137,3 +137,5 @@
 - 是否允许安全重试；
 - 纯 HTTP 或浏览器方案的选择；
 - 尚未验证但会影响正确性的风险。
+
+若认证依赖 Cookie，还必须先完成生成项目的 `docs/cookie-setup.md`。该文档必须基于当前站点证据写出唯一可执行方案；不能只链接本 Skill 的通用参考。若选择交互登录，记录二维码/设备授权生成接口、轮询状态、成功响应、`Set-Cookie` 白名单、超时和平台保存方式；若选择 Network 或 Console，记录精确请求或精确同源表达式、脱敏输出形状及目标环境变量。证据不足则阻塞代码生成。

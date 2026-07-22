@@ -17,7 +17,7 @@
 5. **运行时**：新建项目使用 Python 3；只有用户已提供 Node.js 签到项目时才沿用 Node.js，并记录其包管理器、锁文件和原生测试命令。
 6. **计划**：本地签到时间、IANA 时区、是否需要小范围随机延迟。
 7. **账号**：单账号或多账号；多账号是否允许低并发。
-8. **认证**：Cookie、Bearer Token、API Key、OAuth、Token 刷新或其他机制；Cookie 优先按 [Cookie 获取与会话续用](cookie-acquisition.md) 使用正常响应的 `Set-Cookie` 或已证实的正式流程，无法程序化获得时再给出人工导出说明。
+8. **认证**：Cookie、Bearer Token、API Key、OAuth、Token 刷新或其他机制；Cookie 按 [站点专用 Cookie 获取与登录交付](cookie-acquisition.md) 优先实现有证据的正式交互登录，否则从该站点的精确 Network 或安全 Console 取证生成独有说明，不给通用导出教程。
 9. **材料**：接口文档、脱敏 cURL、脱敏 HAR、Network 截图、前端代码、已有脚本、成功与失败响应。
 10. **通知**：仅日志，或 Telegram、PushPlus、Server酱、企业微信等明确渠道。
 

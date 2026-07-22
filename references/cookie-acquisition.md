@@ -1,43 +1,84 @@
-# Cookie 获取与会话续用
+# 站点专用 Cookie 获取与登录交付
 
-仅为用户本人或已获授权账号的正常签到自动化使用 Cookie。用户直接请求分析、生成或修复该签到自动化，即为该账号和所述范围的声明；不要要求其复述固定授权话术。不要在对话、分析文档、代码、测试、工作流或日志中粘贴真实 Cookie。
+本文件是生成规则，不是交付给所有网站共用的 Cookie 教程。每个生成项目必须根据该站点的实际 Network、正式登录接口或 App 登录流程生成独有的 `docs/cookie-setup.md`。证据不足时把获取方式列为阻塞项，不得给出似是而非的 F12 路径、Cookie 名称、Console 指令或登录接口。
 
-## 先选择最小、正常的获取方式
+## 选择获取模式
 
-按以下顺序决定 Cookie 来源，并把结论与证据写入 `docs/site-analysis.md`，但只写 Cookie 名称、第一方域名、生命周期和证据来源，不写值。
+按证据依次选择一种模式，并在 `docs/cookie-setup.md` 写入 `Acquisition mode`：
 
-1. **复用正常响应更新。** 先检查已证实的状态、登录完成或刷新响应是否返回 `Set-Cookie`。生成的 `AccountAuthProvider` 会把这些正常响应更新到同一账号的内存 Cookie jar，供后续同一运行使用；多账号之间不得共享 jar。不要为此猜测登录路径或发送凭据。
-2. **实现有证据的正式流程。** 只有站点文档、脱敏 Network/HAR 或已有授权代码明确证明正式 OAuth、Token 刷新或登录后会话建立流程时，才生成站点专用适配器。该流程必须是用户正常操作的一部分、只使用已证实的字段和路径，刷新最多一次；不得要求用户在聊天中交出密码、短信码、MFA 代码或挑战 Token。
-3. **人工种子 Cookie。** 没有上述证据时，要求操作者在自己的正常浏览器会话中完成登录，然后仅导出运行所需的最少第一方请求 Cookie，并直接保存到受保护的 Secret。不要尝试读取浏览器配置文件、Cookie 数据库、扩展、同步数据或密码库。
+1. `interactive_login`：站点或 App 提供已证实的二维码、设备授权、OAuth 或其他正常交互登录。优先生成站点专用手动登录入口，让操作者本人完成确认，程序有界轮询正式结果，从响应的 `Set-Cookie` 组装白名单 Cookie，再保存到所选平台的受保护环境变量。
+2. `network`：没有可安全实现的交互登录入口，但用户可在正常登录浏览器中查看已认证请求。必须从该站点 Network 取证确定精确请求，而不是泛称“随便找一个请求”。
+3. `console`：仅当证据确认所有必需 Cookie 都可由同源页面 JavaScript 读取时使用。只生成读取明确 Cookie 名称的最小表达式；需要 `HttpOnly` Cookie 时不得使用 Console，改用 `network`。
+4. `not_applicable`：目标实现不使用 Cookie。文档仍要说明实际认证方式和为什么不需要 Cookie 环境变量。
 
-Cookie 只用于受证据支持的第一方请求。遇到 Turnstile、reCAPTCHA、hCaptcha、WAF、设备证明、WebAuthn、短信验证或其他安全挑战时，不自动获取、求解或重放 Cookie；按 [CamoFox 与 noVNC 人工接管](camofox-human-handoff.md) 让用户本人手动完成正常页面流程。
+如果正常状态或刷新响应会更新 Cookie，业务运行时继续用每账号独立的内存 jar 接收 `Set-Cookie`。这属于会话续用，不能替代初始 Cookie 获取方案。
 
-## 人工导出请求 Cookie
+## 编写站点专用 Network 指引
 
-以下步骤用于 Cookie 认证确有证据支持、但无法通过正常响应或正式流程程序化获得初始会话的情况。始终由账号持有人在本机完成；不要把值发给 Codex。
+只有看到脱敏 Network/HAR 或在经授权会话中完成正常取证后，才写具体步骤。`docs/cookie-setup.md` 必须包含：
 
-### Chrome、Edge 或其他 Chromium 浏览器
+- 站点域名、登录页与签到页；
+- 浏览器开发者工具中的面板、筛选词，以及目标请求的精确方法和脱敏路径；
+- 为什么该请求代表已登录会话，如何避免选择广告、埋点或第三方请求；
+- 在 **Headers → Request Headers** 中要读取的头，以及经过证据确认的 Cookie 名称白名单；
+- 最终字符串的脱敏形状，例如注明由 `session` 与 `csrf` 两个名值对组成且二者的值均为 `<REDACTED>`，并说明是否保留顺序、是否 URL 解码、是否删除 `Path`、`Expires` 等 `Set-Cookie` 属性；
+- 最终环境变量的确切名称，单账号与多账号如何填写，GitHub Actions、青龙或本地中用户实际选择的平台如何保存；
+- 用无副作用状态查询验证的方法、过期表现、更新步骤和撤销方式。
 
-1. 使用账号持有人自己的浏览器打开目标站点，按站点正常流程完成登录。若出现 MFA 或安全挑战，用户本人手动完成；不要使用脚本、打码服务或规避工具。
-2. 按 `F12`（或右键“检查”）打开开发者工具，切换到 **Network/网络**，勾选 *Preserve log/保留日志* 后刷新签到页或触发一次无副作用的状态查询。
-3. 选择目标站点第一方的已认证状态请求；在 **Headers/标头 → Request Headers/请求标头** 中找到名为 `Cookie` 的请求头。只记录该请求实际需要的 Cookie 名称和值。不要把完整的 **Copy as cURL**、HAR、请求头或响应上传到聊天。
-4. 如果 Network 无法确认名称，可在 **Application/应用 → Storage → Cookies** 中查看目标第一方域名。只选择已由请求证据证明需要的条目；不要导出第三方域、广告、分析、支付或其他站点的 Cookie。
-5. 把请求头中的 `name=value; name2=value2` 形式直接作为 `CHECKIN_COOKIE` 的受保护值。`CHECKIN_COOKIE` 是请求 `Cookie` 头，**不要**粘贴 `Set-Cookie` 的属性，例如 `Path`、`Domain`、`Expires`、`HttpOnly`、`Secure` 或 `SameSite`。
+不要让用户把 Copy as cURL、完整请求头或真实输出粘贴到对话。Cookie 值从浏览器直接进入受保护的 Secret；文档、截图、命令行参数和日志只出现占位符。
 
-### Firefox
+## 编写站点专用 Console 指令
 
-1. 在用户自己的正常会话中登录目标站点，并手动完成任何安全步骤。
-2. 按 `F12` 打开开发者工具，在 **网络** 面板刷新页面或执行一次状态查询，选择目标第一方的已认证请求。
-3. 在请求的 **标头** 中读取 `Cookie` 请求头；必要时在 **存储** 面板的 **Cookie** 条目核对目标第一方域名和 Cookie 名称。
-4. 仅保存经请求证据支持的 `name=value` 对，并按上节规则设置到 `CHECKIN_COOKIE`。不要导出浏览器配置目录、Cookie 数据库或登录数据。
+先从实际页面脚本和 Cookie 属性确认所需名称可由 `document.cookie` 读取。生成的 JavaScript 必须：
 
-`HttpOnly` 只表示页面 JavaScript 不能读取该 Cookie；它仍可能出现在浏览器实际发出的请求头中。不要为了读取它去注入脚本、访问浏览器数据库或绕过浏览器保护。
+- 固定白名单名称，不输出该域下全部 Cookie；
+- 只读取当前同源页面，不请求外部地址、不写剪贴板、不读取 localStorage、IndexedDB、浏览器扩展或配置文件；
+- 返回与目标环境变量完全一致的字符串形状；
+- 对缺失名称明确报错，不把 `undefined` 当成有效值；
+- 在文档中列出预期的脱敏输出示例和后续处理步骤。
 
-## 安全保存与轮换
+若任一必需 Cookie 是 `HttpOnly`、页面 CSP/权限不允许安全执行，或名称与编码未证实，不生成 Console 指令，改用精确的 Network 指引或交互登录。
 
-- 单账号：将完整的 `name=value; name2=value2` 放入本地进程环境变量、GitHub Actions Secret 或青龙环境变量的 `CHECKIN_COOKIE`；不要放入命令行参数、仓库文件、`.env.example`、截图或日志。
-- 多账号：把每个账号的 Cookie 放在一个完整的 `CHECKIN_ACCOUNTS` JSON Secret 中；账号之间独立，名称使用非敏感标签。提交前只保留不可用占位符。
-- 先用无副作用的状态查询确认 Cookie 是否有效；不要用重复 POST 来测试会话。认证失效时返回 `AUTH_EXPIRED`，要求用户按正常登录或已证实的正式刷新流程更新 Secret。
-- Cookie 轮换、登出、密码修改、设备变更或站点提示会话失效后，删除旧 Secret 并按本指南重新获取。若 Cookie 泄露到对话、文件、日志或 Git 历史，立即在站点撤销/登出该会话并轮换，随后清理副本。
+## 生成交互登录入口
 
-不得通过代理轮换、指纹伪装、隐蔽自动化、会话窃取或任何挑战绕过来获得 Cookie。证据不足时，将 Cookie 获取标记为待确认，而不是编造登录接口或认证字段。
+参考“任务脚本只启动登录业务、登录业务负责获取会话、存储适配器负责写入平台”的分层方式。仅实现已证实的站点正常流程：
+
+1. 请求二维码、设备码或正式授权 URL；
+2. 向用户展示二维码或官方 URL，不展示登录凭据；
+3. 以固定间隔、有界次数轮询正式状态，处理未扫描、待确认、过期、拒绝与成功；
+4. 仅在成功响应中读取 `Set-Cookie` 或正式令牌字段；
+5. 解析并校验站点分析列出的必需 Cookie 名称，拒绝空值和意外域；
+6. 可选执行一次无副作用的第一方请求以接收正常补充 Cookie；
+7. 通过所选平台的安全存储适配器新增或更新目标环境变量，全程不打印秘密；
+8. 返回非敏感账号别名与成功/失败状态，临时会话只保存在内存并在退出时清理。
+
+登录入口必须手动运行，不能进入 GitHub Actions 的定时任务或青龙 cron。轮询 GET 可以按正式协议有界重试；不得重复提交确认、自动处理 MFA、求解安全挑战或提取挑战 Token。
+
+### 平台持久化
+
+- **青龙**：只有确认当前青龙版本和 OpenAPI 后才生成客户端。Client ID/Secret 从受保护环境变量读取；用环境变量查询、新增、更新接口按非敏感账号别名定位目标值。限制 API 基址为配置的青龙实例，设置超时，校验响应，不在失败回退中打印 Cookie。
+- **GitHub Actions**：交互登录应在操作者本机执行；若已安装并登录 GitHub CLI，可把 Cookie 通过标准输入传给 `gh secret set`。不得把 Cookie 放在 `--body`、shell 历史、工作流日志或 Actions artifact 中。
+- **本地**：进程不能修改父 shell。优先让登录入口在同一进程启动一次任务，或使用用户明确选择的系统秘密存储/权限受限且已被忽略的本地文件加载器。不要声称子进程能永久设置父进程环境变量。
+
+若目标平台没有经过验证的安全写入方式，文档必须明确说明限制，并给出站点专用字符串到该平台 Secret 字段的精确人工步骤。
+
+## 测试与验收
+
+对交互登录和 Cookie 设置至少离线验证：
+
+- 二维码/设备码生成、待确认、过期、拒绝和成功响应；
+- 有界轮询与取消；
+- 多个 `Set-Cookie` 合并、删除属性、Cookie 名称白名单和账号隔离；
+- 平台环境变量新增、更新、API 失败和权限失败；
+- 所有日志、异常、测试失败和 mock fixture 不含可复用秘密；
+- 默认 CI 不调用真实登录接口，也不生成真实二维码。
+
+## 结构参考：BiliBiliToolPro
+
+可参考固定提交 `d552d69817cf0a07893f422c5210b39303904b5a` 的分层思路：
+
+- [`bili_task_login.sh`](https://github.com/RayWangQvQ/BiliBiliToolPro/blob/d552d69817cf0a07893f422c5210b39303904b5a/qinglong/DefaultTasks/bili_task_login.sh) 只启动手动 `Login` 任务，不把登录混入日常 cron 业务；
+- [`LoginTaskAppService.cs`](https://github.com/RayWangQvQ/BiliBiliToolPro/blob/d552d69817cf0a07893f422c5210b39303904b5a/src/Ray.BiliBiliTool.Application/LoginTaskAppService.cs) 分离二维码登录、补充 Cookie 与持久化步骤；
+- [`LoginDomainService.cs`](https://github.com/RayWangQvQ/BiliBiliToolPro/blob/d552d69817cf0a07893f422c5210b39303904b5a/src/Ray.BiliBiliTool.DomainService/LoginDomainService.cs) 生成二维码、轮询官方状态、从成功响应合并 `Set-Cookie`，并在青龙平台调用环境变量 API 新增或更新值。
+
+只借鉴“手动登录入口—正式登录会话—平台存储适配器”的结构。不得复制 Bilibili 的路径、状态码、Cookie 名称或青龙 API 假设到其他站点；每个值都要重新取证。该参考实现在持久化失败时可能把 Cookie 输出到日志，生成项目不得复制这种回退行为，只能报告脱敏错误和精确恢复步骤。

@@ -55,6 +55,24 @@ def remove_site_analysis(project: Path) -> None:
     (project / "docs" / "site-analysis.md").unlink()
 
 
+def remove_cookie_setup(project: Path) -> None:
+    (project / "docs" / "cookie-setup.md").unlink()
+
+
+def replace_cookie_setup_with_generic_f12(project: Path) -> None:
+    (project / "docs" / "cookie-setup.md").write_text(
+        "# Cookie setup\n\n"
+        "- Acquisition mode: `network`\n"
+        "- Site and scope: target site\n"
+        "- Evidence source: unspecified\n\n"
+        "## Exact operator steps\n\nOpen F12 and inspect Network.\n\n"
+        "## Output and transformation\n\nCopy a Cookie string.\n\n"
+        "## Secret destination\n\nPut it in an environment variable.\n\n"
+        "## Expiration and renewal\n\nRepeat when expired.\n",
+        encoding="utf-8",
+    )
+
+
 def remove_schedule_timezone(project: Path) -> None:
     workflow = project / ".github" / "workflows" / "daily-checkin.yml"
     replace_once(workflow, '      timezone: "Asia/Shanghai"\n', "")
@@ -126,6 +144,7 @@ def main() -> int:
 
     cases: tuple[tuple[str, Callable[[Path], None], str], ...] = (
         ("missing site analysis", remove_site_analysis, "docs/site-analysis.md is missing or empty"),
+        ("missing site-specific Cookie setup", remove_cookie_setup, "docs/cookie-setup.md is missing or empty"),
         (
             "missing per-schedule timezone",
             remove_schedule_timezone,
@@ -180,6 +199,20 @@ def main() -> int:
             return 1
         print("[PASS] site-specific fictional example accepted")
 
+        generic_cookie = temp_root / "generic-cookie-setup"
+        shutil.copytree(EXAMPLE, generic_cookie)
+        replace_cookie_setup_with_generic_f12(generic_cookie)
+        generic_cookie_result = run_validator(generic_cookie, "generated")
+        generic_cookie_output = generic_cookie_result.stdout + "\n" + generic_cookie_result.stderr
+        if (
+            generic_cookie_result.returncode == 0
+            or "Network Cookie setup lacks request method/path" not in generic_cookie_output
+        ):
+            print("[FAIL] generated mode accepted a generic F12 Cookie guide", file=sys.stderr)
+            print(generic_cookie_output[-2000:], file=sys.stderr)
+            return 1
+        print("[PASS] generic F12 Cookie guide rejected with content finding")
+
         for index, (name, mutate, expected) in enumerate(cases, start=1):
             project = temp_root / f"mutation-{index}"
             shutil.copytree(TEMPLATE, project)
@@ -200,7 +233,7 @@ def main() -> int:
     if failures:
         print(f"\nValidator mutation tests failed ({failures} case(s)).", file=sys.stderr)
         return 1
-    print(f"\nValidator mutation tests passed ({len(cases)} rejected mutations).")
+    print(f"\nValidator mutation tests passed ({len(cases) + 1} rejected mutations).")
     return 0
 
 

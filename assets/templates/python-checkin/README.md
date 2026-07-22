@@ -8,7 +8,7 @@ For each account, the service queries today's state, obtains a CSRF token, sends
 
 ## Configuration
 
-First replace the non-secret site facts in `src/checkin/site_config.py` using verified `docs/site-analysis.md` evidence. They are intentionally source-controlled and cannot be overridden through environment variables. Use environment variables only for secrets and runtime choices.
+First replace the non-secret site facts in `src/checkin/site_config.py` using verified `docs/site-analysis.md` evidence. Replace `docs/cookie-setup.md` with the target site's exact acquisition mode and operator steps; never ship its `template` scaffold. Fixed site facts are intentionally source-controlled and cannot be overridden through environment variables. Use environment variables only for secrets and runtime choices.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ python tests/run_offline.py
 python run.py
 ```
 
-The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: a normal `Set-Cookie` response updates only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. If the verified flow needs an initial Cookie, obtain the minimum first-party request Cookie from the operator's normal browser session and put it directly in the protected secret store; never copy a browser profile or Cookie database. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
+The HTTP and business implementation uses the standard library. Responses are capped at 1 MiB before parsing. Authentication state is isolated per account: a normal `Set-Cookie` response updates only that account's small cookie jar, and a site-specific integration may inject one documented refresh callback. The default provider never invents a login or refresh endpoint. When verified evidence supports an official QR/device/OAuth flow, the generated project may add a manual `login.py` that receives the successful session and writes it to the selected protected secret store without logging it. Otherwise `docs/cookie-setup.md` must name the exact target-site Network request or safe same-origin Console expression and the final environment-variable shape. Tests inject mock HTTP responses and never contact a real site. The fixed origin and endpoint paths are mandatory in `site_config.py`, so incomplete configuration cannot fall back to invented routes. A live run occurs only when valid secret configuration is supplied; there is no automatic `LIVE_TEST` path in CI.
 
 ## Deployment
 

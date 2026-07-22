@@ -696,6 +696,7 @@ def generated_scaffold_findings(root: Path) -> list[Finding]:
     markers = (
         "checkin.example.invalid",
         "Baseline contract (not site evidence)",
+        "Cookie setup scaffold (not site evidence)",
         "sanitized-placeholder",
     )
     findings: list[Finding] = []
@@ -734,6 +735,7 @@ def site_analysis_findings(root: Path) -> list[Finding]:
         "authentication-expiry evidence": ("authentication expired", "auth_expired", "认证过期"),
         "temporary-error evidence": ("temporary", "临时"),
         "site-change evidence": ("site changed", "site_changed", "网站变化"),
+        "Cookie acquisition evidence": ("cookie acquisition", "cookie 获取"),
     }
     findings: list[Finding] = []
     for label, alternatives in required_groups.items():
@@ -741,6 +743,87 @@ def site_analysis_findings(root: Path) -> list[Finding]:
             findings.append(Finding(path, 0, f"site analysis lacks {label}"))
     if TODO_RE.search(text):
         findings.append(Finding(path, 0, "site analysis contains an unfinished TODO"))
+    return findings
+
+
+def cookie_setup_findings(root: Path, mode: str) -> list[Finding]:
+    path = root / "docs" / "cookie-setup.md"
+    if not nonempty_file(path):
+        return [Finding(path, 0, "docs/cookie-setup.md is missing or empty")]
+    try:
+        text = read_text(path)
+    except (OSError, UnicodeError) as exc:
+        return [Finding(path, 0, f"Cookie setup cannot be read: {type(exc).__name__}")]
+
+    lowered = text.casefold()
+    findings: list[Finding] = []
+    required_groups = {
+        "site and scope": ("site and scope", "站点与范围"),
+        "evidence source": ("evidence source", "证据来源"),
+        "exact operator steps": ("exact operator steps", "精确操作步骤"),
+        "output transformation": ("output and transformation", "输出与处理"),
+        "secret destination": ("secret destination", "secret 目标", "秘密目标"),
+        "expiration and renewal": ("expiration and renewal", "过期与更新"),
+    }
+    for label, alternatives in required_groups.items():
+        if not any(term.casefold() in lowered for term in alternatives):
+            findings.append(Finding(path, 0, f"Cookie setup lacks {label}"))
+
+    mode_match = re.search(
+        r"(?im)^\s*[-*]?\s*(?:acquisition mode|获取模式)\s*:\s*`?([a-z_]+)`?\s*$",
+        text,
+    )
+    acquisition_mode = mode_match.group(1).casefold() if mode_match else ""
+    if not acquisition_mode:
+        findings.append(Finding(path, 0, "Cookie setup lacks a parseable Acquisition mode"))
+    elif mode == "template":
+        if acquisition_mode != "template":
+            findings.append(Finding(path, 0, "template Cookie setup Acquisition mode must be 'template'"))
+    else:
+        allowed_modes = {"interactive_login", "network", "console", "not_applicable"}
+        if acquisition_mode not in allowed_modes:
+            findings.append(
+                Finding(path, 0, "generated Cookie setup must use an evidenced site-specific acquisition mode")
+            )
+        if acquisition_mode == "interactive_login":
+            groups = {
+                "manual login command": ("login command", "登录命令", "login.py"),
+                "bounded polling": ("timeout", "超时", "bounded", "有界"),
+                "successful session response": ("set-cookie",),
+                "protected persistence": ("environment variable", "环境变量", "secret"),
+                "no secret logging": ("do not log", "不得打印", "不打印"),
+            }
+            for label, alternatives in groups.items():
+                if not any(term.casefold() in lowered for term in alternatives):
+                    findings.append(Finding(path, 0, f"interactive Cookie setup lacks {label}"))
+        elif acquisition_mode == "network":
+            groups = {
+                "Network request": ("network",),
+                "request method/path": ("method", "方法"),
+                "Request Headers": ("request headers", "请求标头", "请求头"),
+                "Cookie-name whitelist": ("cookie name", "cookie 名称"),
+                "target environment variable": ("environment variable", "环境变量"),
+            }
+            for label, alternatives in groups.items():
+                if not any(term.casefold() in lowered for term in alternatives):
+                    findings.append(Finding(path, 0, f"Network Cookie setup lacks {label}"))
+        elif acquisition_mode == "console":
+            groups = {
+                "Console expression": ("console",),
+                "JavaScript source": ("document.cookie", "javascript"),
+                "HttpOnly decision": ("httponly",),
+                "Cookie-name whitelist": ("cookie name", "cookie 名称"),
+                "target environment variable": ("environment variable", "环境变量"),
+            }
+            for label, alternatives in groups.items():
+                if not any(term.casefold() in lowered for term in alternatives):
+                    findings.append(Finding(path, 0, f"Console Cookie setup lacks {label}"))
+        elif acquisition_mode == "not_applicable":
+            if not any(term in lowered for term in ("bearer", "api key", "token", "不使用 cookie")):
+                findings.append(Finding(path, 0, "not-applicable Cookie setup lacks actual auth rationale"))
+
+    if TODO_RE.search(text):
+        findings.append(Finding(path, 0, "Cookie setup contains an unfinished TODO"))
     return findings
 
 
@@ -756,6 +839,7 @@ def readme_contract_findings(root: Path) -> list[Finding]:
     required_groups = {
         "authorization boundary": ("authorized", "授权"),
         "site analysis": ("docs/site-analysis.md",),
+        "site-specific Cookie setup": ("docs/cookie-setup.md",),
         "local run": ("local", "本地"),
         "GitHub deployment": ("github actions",),
         "QingLong deployment": ("qinglong", "青龙"),
@@ -1640,6 +1724,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "site-analysis evidence contract",
         not analysis_findings,
         format_findings(root, analysis_findings),
+    )
+
+    cookie_findings = cookie_setup_findings(root, args.mode)
+    reporter.check(
+        "site-specific Cookie setup contract",
+        not cookie_findings,
+        format_findings(root, cookie_findings),
     )
 
     contract_findings = site_contract_findings(root, args.mode)

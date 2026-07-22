@@ -905,14 +905,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     cookie_path = root / "references/cookie-acquisition.md"
     cookie_terms = (
+        "docs/cookie-setup.md",
+        "interactive_login",
+        "network",
+        "console",
+        "not_applicable",
         "Set-Cookie",
-        "开发者工具",
-        "Request Headers",
-        "CHECKIN_COOKIE",
-        "GitHub Actions Secret",
-        "青龙环境变量",
-        "浏览器配置文件",
-        "不得通过代理轮换",
+        "HttpOnly",
+        "青龙",
+        "标准输入",
+        "不是交付给所有网站共用",
     )
     missing_cookie_terms: list[str] = []
     try:

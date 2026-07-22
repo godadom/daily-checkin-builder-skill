@@ -39,6 +39,8 @@ Before enabling the schedule, run these commands manually in the task directory:
 
 The first command is fully offline. The second is a live authorized run and must be used only after the protected environment values are configured.
 
+If verified `docs/cookie-setup.md` selects `interactive_login`, the generated project must document an additional manual-only command such as `python3 login.py --store qinglong`. Do not assign cron to it. The site-specific login flow must wait for the operator's official login confirmation, whitelist the returned Cookie names, and add or update the configured QingLong environment variable through a verified OpenAPI without printing the value. If this project does not contain `login.py`, follow the exact site-specific Network or Console steps in that document instead.
+
 ## Operate, rotate, and disable
 
 When authentication expires, complete the site's ordinary login flow manually, replace the affected QingLong environment value, and manually rerun the task. Do not automate login, CAPTCHA, WAF, WebAuthn, or device-verification challenges.

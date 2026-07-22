@@ -39,6 +39,8 @@ Before enabling the schedule, run these commands manually in the task directory:
 
 The first command is fully offline. The second is a live authorized run and must be used only after the protected environment values are configured.
 
+This fictional example's `docs/cookie-setup.md` selects `not_applicable`, so it has no Cookie login task. A real generated project that selects `interactive_login` must provide a separate manual-only login command and securely add or update the QingLong environment variable without logging its value.
+
 ## Operate, rotate, and disable
 
 When authentication expires, complete the site's ordinary login flow manually, replace the affected QingLong environment value, and manually rerun the task. Do not automate login, CAPTCHA, WAF, WebAuthn, or device-verification challenges.
